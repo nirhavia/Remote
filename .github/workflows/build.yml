@@ -16,7 +16,8 @@ jobs:
       - name: Extract project ZIP
         run: |
           unzip yes-remote-android.zip
-          mv yes-remote/* .
+          cp -r yes-remote/. .
+          rm -rf yes-remote yes-remote-android.zip
           ls -la
 
       - name: Set up JDK 17
@@ -28,11 +29,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Generate Gradle wrapper
+        run: |
+          gradle wrapper --gradle-version 8.4
+          chmod +x gradlew
+          ls -la
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
