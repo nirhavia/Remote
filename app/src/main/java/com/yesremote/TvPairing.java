@@ -2,24 +2,31 @@ package com.yesremote;
 
 import android.util.Base64;
 import android.util.Log;
+
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.cert.X509v3CertificateBuilder;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+
 import java.io.*;
+import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.security.*;
-import java.security.cert.*;
-import java.security.spec.*;
+import java.security.cert.X509Certificate;
+import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 import javax.net.ssl.*;
-import javax.security.auth.x500.X500Principal;
-import java.math.BigInteger;
-import java.util.Date;
 
 public class TvPairing {
     private static final String TAG = "TvPairing";
     private static final int PAIR_PORT = 6466;
 
     public interface Callback {
-        void onShowPin(String pin);
+        void onShowPin();
         void onPaired(byte[] certBytes, byte[] keyBytes);
         void onError(String msg);
     }
@@ -30,6 +37,8 @@ public class TvPairing {
     private SSLSocket socket;
     private InputStream in;
     private OutputStream out;
+    private KeyPair keyPair;
+    private X509Certificate cert;
 
     public TvPairing(String host, Callback callback) {
         this.host = host;
@@ -39,88 +48,99 @@ public class TvPairing {
     public void startPairing() {
         exec.execute(() -> {
             try {
-                // Generate self-signed cert + key pair
+                // Generate key pair
                 KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
                 kpg.initialize(2048, new SecureRandom());
-                KeyPair kp = kpg.generateKeyPair();
+                keyPair = kpg.generateKeyPair();
 
-                // Build TLS context with our generated cert
-                SSLContext ssl = SSLContext.getInstance("TLS");
-                TrustManager[] tm = { new X509TrustManager() {
+                // Generate self-signed certificate using BouncyCastle
+                cert = generateCert(keyPair);
+
+                // Build SSL context with our cert as client cert
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(null, null);
+                ks.setKeyEntry("client", keyPair.getPrivate(), new char[0],
+                        new java.security.cert.Certificate[]{cert});
+
+                KeyManagerFactory kmf = KeyManagerFactory.getInstance(
+                        KeyManagerFactory.getDefaultAlgorithm());
+                kmf.init(ks, new char[0]);
+
+                TrustManager[] tm = {new X509TrustManager() {
                     public void checkClientTrusted(X509Certificate[] c, String a) {}
                     public void checkServerTrusted(X509Certificate[] c, String a) {}
                     public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
                 }};
 
-                KeyManager[] km = buildKeyManagers(kp);
-                ssl.init(km, tm, new SecureRandom());
+                SSLContext ssl = SSLContext.getInstance("TLS");
+                ssl.init(kmf.getKeyManagers(), tm, new SecureRandom());
 
                 socket = (SSLSocket) ssl.getSocketFactory().createSocket();
                 socket.connect(new InetSocketAddress(host, PAIR_PORT), 5000);
                 socket.startHandshake();
 
-                in = socket.getInputStream();
+                in  = socket.getInputStream();
                 out = socket.getOutputStream();
 
-                // Step 1: Send PairingRequest
+                // Send PairingRequest
                 sendPairingRequest();
+                readMsg(); // ack
 
-                // Step 2: Read PairingRequestAck
-                readMessage(); // ack
-
-                // Step 3: Send Options
+                // Send Options
                 sendOptions();
+                readMsg(); // options response
 
-                // Step 4: Read Options response
-                byte[] optResp = readMessage();
+                // Send Configuration
+                sendConfig();
+                readMsg(); // config ack
 
-                // Step 5: Send configuration
-                sendConfiguration();
-
-                // Step 6: Read ConfigurationAck
-                readMessage();
-
-                // At this point TV shows PIN on screen
-                if (callback != null) callback.onShowPin("הסתכל על מסך הטלוויזיה");
-
-                // Step 7: Wait for user to see PIN, then we need the PIN to send Secret
-                // Store socket open - caller must call submitPin(pin)
-                storeSession(kp);
+                // TV now shows PIN on screen
+                if (callback != null) callback.onShowPin();
 
             } catch (Exception e) {
-                Log.e(TAG, "Pairing error: " + e.getMessage());
+                Log.e(TAG, "Pairing error: " + e.getMessage(), e);
                 if (callback != null) callback.onError(e.getMessage());
             }
         });
     }
 
-    private KeyPair storedKp;
-    private void storeSession(KeyPair kp) { this.storedKp = kp; }
-
     public void submitPin(String pin) {
         exec.execute(() -> {
             try {
-                // Send secret derived from PIN
-                byte[] secret = pin.getBytes("UTF-8");
-                ByteArrayOutputStream payload = new ByteArrayOutputStream();
-                payload.write(0x0a); payload.write(secret.length); payload.write(secret);
-                sendRaw(payload.toByteArray());
+                // Compute secret from PIN + certificates
+                byte[] secret = computeSecret(pin);
+                ByteArrayOutputStream p = new ByteArrayOutputStream();
+                p.write(0x0a); p.write(secret.length); p.write(secret);
+                sendRaw(p.toByteArray());
 
-                // Read SecretAck
-                byte[] ack = readMessage();
-                Log.d(TAG, "Secret ack: " + ack.length + " bytes");
+                byte[] ack = readMsg();
+                Log.d(TAG, "Paired! ack=" + ack.length);
 
                 socket.close();
 
-                // Save cert bytes for future connections
-                byte[] certBytes = storedKp.getPublic().getEncoded();
-                byte[] keyBytes  = storedKp.getPrivate().getEncoded();
+                byte[] certBytes = cert.getEncoded();
+                byte[] keyBytes  = keyPair.getPrivate().getEncoded();
                 if (callback != null) callback.onPaired(certBytes, keyBytes);
 
             } catch (Exception e) {
+                Log.e(TAG, "Pin submit error: " + e.getMessage(), e);
                 if (callback != null) callback.onError(e.getMessage());
             }
         });
+    }
+
+    private byte[] computeSecret(String pin) throws Exception {
+        // Android TV Remote v2: secret = SHA256(client_cert + server_cert + pin)
+        java.security.cert.Certificate[] serverCerts = socket.getSession().getPeerCertificates();
+        byte[] clientCertBytes = cert.getEncoded();
+        byte[] serverCertBytes = serverCerts[0].getEncoded();
+        byte[] pinBytes = pin.getBytes("UTF-8");
+
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        md.update(clientCertBytes);
+        md.update(serverCertBytes);
+        md.update(pinBytes);
+        return md.digest();
     }
 
     private void sendPairingRequest() throws Exception {
@@ -135,15 +155,11 @@ public class TvPairing {
     }
 
     private void sendOptions() throws Exception {
-        // encoding: HEXADECIMAL, preferred: HEXADECIMAL
-        byte[] p = {0x08, 0x03, 0x10, 0x03};
-        sendRaw(p);
+        sendRaw(new byte[]{0x08, 0x03, 0x10, 0x03});
     }
 
-    private void sendConfiguration() throws Exception {
-        // encoding: HEXADECIMAL
-        byte[] p = {0x08, 0x03};
-        sendRaw(p);
+    private void sendConfig() throws Exception {
+        sendRaw(new byte[]{0x08, 0x03});
     }
 
     private void sendRaw(byte[] payload) throws Exception {
@@ -153,33 +169,28 @@ public class TvPairing {
         out.write(msg); out.flush();
     }
 
-    private byte[] readMessage() throws Exception {
-        byte[] header = new byte[2];
-        int read = 0;
-        while (read < 2) read += in.read(header, read, 2 - read);
-        int len = header[1] & 0xFF;
+    private byte[] readMsg() throws Exception {
+        byte[] h = new byte[2];
+        int r = 0; while (r < 2) r += in.read(h, r, 2-r);
+        int len = h[1] & 0xFF;
         if (len == 0) return new byte[0];
-        byte[] body = new byte[len];
-        read = 0;
-        while (read < len) read += in.read(body, read, len - read);
-        return body;
+        byte[] b = new byte[len];
+        r = 0; while (r < len) r += in.read(b, r, len-r);
+        return b;
     }
 
-    private KeyManager[] buildKeyManagers(KeyPair kp) throws Exception {
-        // Create a simple in-memory KeyStore with our key pair
-        KeyStore ks = KeyStore.getInstance("PKCS12");
-        ks.load(null, null);
-        // We store just the private key - cert validation is skipped by TV
-        // Use a placeholder self-signed cert
-        java.security.cert.Certificate[] chain = {}; // empty - TV doesn't verify
-        try {
-            ks.setKeyEntry("key", kp.getPrivate(), new char[0], new java.security.cert.Certificate[0]);
-        } catch (Exception e) {
-            // Some devices need at least one cert - generate minimal one
-            Log.w(TAG, "KeyStore setKey: " + e.getMessage());
-        }
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        kmf.init(ks, new char[0]);
-        return kmf.getKeyManagers();
+    private X509Certificate generateCert(KeyPair kp) throws Exception {
+        X500Name name = new X500Name("CN=YesRemote,O=YesRemote,C=IL");
+        BigInteger serial = BigInteger.valueOf(System.currentTimeMillis());
+        Date from = new Date(System.currentTimeMillis() - 86400000L);
+        Date to   = new Date(System.currentTimeMillis() + 10 * 365 * 86400000L);
+
+        X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
+                name, serial, from, to, name, kp.getPublic());
+
+        ContentSigner signer = new JcaContentSignerBuilder("SHA256WithRSAEncryption")
+                .build(kp.getPrivate());
+
+        return new JcaX509CertificateConverter().getCertificate(builder.build(signer));
     }
 }
