@@ -4,8 +4,10 @@ android {
     compileSdk 34
     defaultConfig {
         applicationId "com.yesremote"
-        minSdk 23; targetSdk 34
-        versionCode 3; versionName "3.0"
+        minSdk 23
+        targetSdk 34
+        versionCode 3
+        versionName "3.0"
     }
     buildTypes { release { minifyEnabled false } }
     compileOptions {
@@ -16,5 +18,4 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
-    implementation 'com.github.Aira-Sakuranomiya:android-tv-remote:1.0.0'
 }
