@@ -28,37 +28,27 @@ public class TvDiscovery {
 
     public void start() {
         discoveryListener = new NsdManager.DiscoveryListener() {
-            @Override public void onStartDiscoveryFailed(String s, int e) { listener.onDiscoveryFailed(); }
-            @Override public void onStopDiscoveryFailed(String s, int e) {}
-            @Override public void onDiscoveryStarted(String s) { Log.d(TAG, "Discovery started"); }
-            @Override public void onDiscoveryStopped(String s) {}
-
-            @Override
+            public void onStartDiscoveryFailed(String s, int e) { listener.onDiscoveryFailed(); }
+            public void onStopDiscoveryFailed(String s, int e) {}
+            public void onDiscoveryStarted(String s) {}
+            public void onDiscoveryStopped(String s) {}
             public void onServiceFound(NsdServiceInfo info) {
-                Log.d(TAG, "Found: " + info.getServiceName());
                 nsdManager.resolveService(info, new NsdManager.ResolveListener() {
-                    @Override public void onResolveFailed(NsdServiceInfo i, int e) {}
-                    @Override
+                    public void onResolveFailed(NsdServiceInfo i, int e) {}
                     public void onServiceResolved(NsdServiceInfo i) {
                         String host = i.getHost().getHostAddress();
-                        String name = i.getServiceName();
-                        int port = i.getPort();
                         if (!found.contains(host)) {
                             found.add(host);
-                            listener.onDeviceFound(name, host, port);
+                            listener.onDeviceFound(i.getServiceName(), host, i.getPort());
                         }
                     }
                 });
             }
-
-            @Override public void onServiceLost(NsdServiceInfo info) {}
+            public void onServiceLost(NsdServiceInfo info) {}
         };
-
         try {
             nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
-        } catch (Exception e) {
-            listener.onDiscoveryFailed();
-        }
+        } catch (Exception e) { listener.onDiscoveryFailed(); }
     }
 
     public void stop() {
