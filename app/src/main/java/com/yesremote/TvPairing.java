@@ -43,7 +43,6 @@ public class TvPairing {
                 KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
                 kpg.initialize(2048);
                 kp = kpg.generateKeyPair();
-
                 X500Name name = new X500Name("CN=YesRemote");
                 clientCert = new JcaX509CertificateConverter().getCertificate(
                     new JcaX509v3CertificateBuilder(
@@ -52,33 +51,28 @@ public class TvPairing {
                         new Date(System.currentTimeMillis() + 3650L * 86400000L),
                         name, kp.getPublic())
                     .build(new JcaContentSignerBuilder("SHA256withRSA").build(kp.getPrivate())));
-
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 ks.load(null, null);
                 ks.setKeyEntry("k", kp.getPrivate(), new char[0], new X509Certificate[]{clientCert});
                 KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 kmf.init(ks, new char[0]);
-
                 SSLContext ssl = SSLContext.getInstance("TLSv1.2");
                 ssl.init(kmf.getKeyManagers(), new TrustManager[]{new X509TrustManager() {
                     public void checkClientTrusted(X509Certificate[] c, String a) {}
                     public void checkServerTrusted(X509Certificate[] c, String a) {}
                     public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
                 }}, new SecureRandom());
-
                 sock = (SSLSocket) ssl.getSocketFactory().createSocket();
                 sock.connect(new InetSocketAddress(host, PORT), 5000);
                 sock.startHandshake();
-                in  = sock.getInputStream();
+                in = sock.getInputStream();
                 out = sock.getOutputStream();
-
                 sendMsg(10, buildPairingRequest());
                 readMsg();
                 sendMsg(20, buildOptions());
                 readMsg();
                 sendMsg(30, buildConfiguration());
                 readMsg();
-
                 if (cb != null) cb.onShowPin();
             } catch (Exception e) {
                 Log.e(TAG, "start error", e);
@@ -111,7 +105,7 @@ public class TvPairing {
         });
     }
 
-    private byte[] unsigned(BigInteger n) {
+    private byte[] unsigned(java.math.BigInteger n) {
         byte[] b = n.toByteArray();
         if (b[0] == 0) { byte[] t = new byte[b.length-1]; System.arraycopy(b,1,t,0,t.length); return t; }
         return b;

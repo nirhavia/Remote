@@ -98,7 +98,6 @@ public class TvClient {
             .putBoolean("paired_"+ip,true).apply();
     }
 
-    // NEW: מחיקת נתוני pairing לצורך התחברות מחדש
     public void clearPairing(String ip){
         disconnect();
         ctx.getSharedPreferences(PREFS,0).edit()

@@ -19,12 +19,12 @@ public class RemoteWidget extends AppWidgetProvider {
         int[] kcs={TvClient.KEY_0,TvClient.KEY_1,TvClient.KEY_2,TvClient.KEY_3,TvClient.KEY_4,
                    TvClient.KEY_5,TvClient.KEY_6,TvClient.KEY_7,TvClient.KEY_8,TvClient.KEY_9};
         for(int i=0;i<wids.length;i++) v.setOnClickPendingIntent(wids[i],pi(ctx,kcs[i],id*20+i));
-        v.setOnClickPendingIntent(R.id.w_ch_up,    pi(ctx,TvClient.KEY_CH_UP,      id*20+10));
-        v.setOnClickPendingIntent(R.id.w_ch_down,  pi(ctx,TvClient.KEY_CH_DOWN,    id*20+11));
-        v.setOnClickPendingIntent(R.id.w_vol_up,   pi(ctx,TvClient.KEY_VOL_UP,     id*20+12));
-        v.setOnClickPendingIntent(R.id.w_vol_down, pi(ctx,TvClient.KEY_VOL_DOWN,   id*20+13));
-        v.setOnClickPendingIntent(R.id.w_ok,       pi(ctx,TvClient.KEY_OK,         id*20+14));
-        v.setOnClickPendingIntent(R.id.w_back,     pi(ctx,TvClient.KEY_BACK,       id*20+15));
+        v.setOnClickPendingIntent(R.id.w_ch_up,    pi(ctx,TvClient.KEY_CH_UP,       id*20+10));
+        v.setOnClickPendingIntent(R.id.w_ch_down,  pi(ctx,TvClient.KEY_CH_DOWN,     id*20+11));
+        v.setOnClickPendingIntent(R.id.w_vol_up,   pi(ctx,TvClient.KEY_VOL_UP,      id*20+12));
+        v.setOnClickPendingIntent(R.id.w_vol_down, pi(ctx,TvClient.KEY_VOL_DOWN,    id*20+13));
+        v.setOnClickPendingIntent(R.id.w_ok,       pi(ctx,TvClient.KEY_OK,          id*20+14));
+        v.setOnClickPendingIntent(R.id.w_back,     pi(ctx,TvClient.KEY_BACK,        id*20+15));
         v.setOnClickPendingIntent(R.id.w_last_ch,  pi(ctx,TvClient.KEY_LAST_CHANNEL,id*20+16));
         mgr.updateAppWidget(id,v);
     }
