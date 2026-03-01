@@ -35,10 +35,7 @@ public class TvPairing {
     private KeyPair kp;
     private X509Certificate clientCert;
 
-    public TvPairing(String host, Callback cb) {
-        this.host = host;
-        this.cb = cb;
-    }
+    public TvPairing(String host, Callback cb) { this.host = host; this.cb = cb; }
 
     public void start() {
         exec.execute(() -> {
@@ -84,7 +81,7 @@ public class TvPairing {
 
                 if (cb != null) cb.onShowPin();
             } catch (Exception e) {
-                Log.e(TAG, "Pairing start error", e);
+                Log.e(TAG, "start error", e);
                 if (cb != null) cb.onError(e.getMessage());
             }
         });
@@ -94,73 +91,67 @@ public class TvPairing {
         exec.execute(() -> {
             try {
                 X509Certificate serverCert = (X509Certificate) sock.getSession().getPeerCertificates()[0];
-                RSAPublicKey clientPub = (RSAPublicKey) clientCert.getPublicKey();
-                RSAPublicKey serverPub = (RSAPublicKey) serverCert.getPublicKey();
-                byte[] clientMod = toUnsignedBytes(clientPub.getModulus());
-                byte[] serverMod = toUnsignedBytes(serverPub.getModulus());
+                RSAPublicKey cPub = (RSAPublicKey) clientCert.getPublicKey();
+                RSAPublicKey sPub = (RSAPublicKey) serverCert.getPublicKey();
+                byte[] cMod = unsigned(cPub.getModulus());
+                byte[] sMod = unsigned(sPub.getModulus());
                 byte[] pinBytes = new byte[pin.length()];
                 for (int i = 0; i < pin.length(); i++)
                     pinBytes[i] = (byte) Character.getNumericValue(pin.charAt(i));
                 MessageDigest sha = MessageDigest.getInstance("SHA-256");
-                sha.update(clientMod); sha.update(serverMod); sha.update(pinBytes);
-                byte[] secret = sha.digest();
-                sendMsg(40, buildSecret(secret));
+                sha.update(cMod); sha.update(sMod); sha.update(pinBytes);
+                sendMsg(40, buildSecret(sha.digest()));
                 readMsg();
                 sock.close();
                 if (cb != null) cb.onPaired(kp.getPrivate().getEncoded(), clientCert.getEncoded());
             } catch (Exception e) {
-                Log.e(TAG, "PIN error", e);
+                Log.e(TAG, "pin error", e);
                 if (cb != null) cb.onError(e.getMessage());
             }
         });
     }
 
-    private byte[] toUnsignedBytes(java.math.BigInteger n) {
+    private byte[] unsigned(BigInteger n) {
         byte[] b = n.toByteArray();
         if (b[0] == 0) { byte[] t = new byte[b.length-1]; System.arraycopy(b,1,t,0,t.length); return t; }
         return b;
     }
-
     private byte[] buildPairingRequest() throws IOException {
-        ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        writeString(buf, 1, "YES Remote"); writeString(buf, 2, "Android"); return buf.toByteArray();
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        writeStr(b,1,"YES Remote"); writeStr(b,2,"Android"); return b.toByteArray();
     }
     private byte[] buildOptions() throws IOException {
-        ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        ByteArrayOutputStream enc = new ByteArrayOutputStream();
-        writeVarint(enc, 1, 3); writeBytes(buf, 1, enc.toByteArray()); writeVarint(buf, 2, 1); return buf.toByteArray();
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        ByteArrayOutputStream e = new ByteArrayOutputStream();
+        writeVar(e,1,3); writeBytes(b,1,e.toByteArray()); writeVar(b,2,1); return b.toByteArray();
     }
     private byte[] buildConfiguration() throws IOException {
-        ByteArrayOutputStream buf = new ByteArrayOutputStream(); writeVarint(buf, 1, 3); return buf.toByteArray();
+        ByteArrayOutputStream b = new ByteArrayOutputStream(); writeVar(b,1,3); return b.toByteArray();
     }
-    private byte[] buildSecret(byte[] secret) throws IOException {
-        ByteArrayOutputStream buf = new ByteArrayOutputStream(); writeBytes(buf, 1, secret); return buf.toByteArray();
+    private byte[] buildSecret(byte[] s) throws IOException {
+        ByteArrayOutputStream b = new ByteArrayOutputStream(); writeBytes(b,1,s); return b.toByteArray();
     }
-    private void writeVarint(ByteArrayOutputStream buf, int field, int value) {
-        buf.write((field << 3) | 0); buf.write(value & 0x7F);
+    private void writeVar(ByteArrayOutputStream b, int f, int v) { b.write((f<<3)|0); b.write(v&0x7F); }
+    private void writeStr(ByteArrayOutputStream b, int f, String s) throws IOException { writeBytes(b,f,s.getBytes("UTF-8")); }
+    private void writeBytes(ByteArrayOutputStream b, int f, byte[] v) throws IOException {
+        b.write((f<<3)|2); writeRawVar(b,v.length); b.write(v);
     }
-    private void writeString(ByteArrayOutputStream buf, int field, String value) throws IOException {
-        writeBytes(buf, field, value.getBytes("UTF-8"));
+    private void writeRawVar(ByteArrayOutputStream b, int v) {
+        while((v&~0x7F)!=0){b.write((v&0x7F)|0x80);v>>>=7;} b.write(v);
     }
-    private void writeBytes(ByteArrayOutputStream buf, int field, byte[] value) throws IOException {
-        buf.write((field << 3) | 2); writeRawVarint(buf, value.length); buf.write(value);
-    }
-    private void writeRawVarint(ByteArrayOutputStream buf, int value) {
-        while ((value & ~0x7F) != 0) { buf.write((value & 0x7F) | 0x80); value >>>= 7; } buf.write(value);
-    }
-    private void sendMsg(int msgType, byte[] payload) throws IOException {
+    private void sendMsg(int t, byte[] payload) throws IOException {
         ByteArrayOutputStream inner = new ByteArrayOutputStream();
-        writeVarint(inner, 1, msgType); writeBytes(inner, 2, payload);
-        byte[] innerBytes = inner.toByteArray();
-        byte[] frame = new byte[2 + innerBytes.length];
-        frame[0] = 0x00; frame[1] = (byte) innerBytes.length;
-        System.arraycopy(innerBytes, 0, frame, 2, innerBytes.length);
+        writeVar(inner,1,t); writeBytes(inner,2,payload);
+        byte[] ib = inner.toByteArray();
+        byte[] frame = new byte[2+ib.length];
+        frame[0]=0x00; frame[1]=(byte)ib.length;
+        System.arraycopy(ib,0,frame,2,ib.length);
         out.write(frame); out.flush();
     }
     private byte[] readMsg() throws IOException {
-        byte[] header = new byte[2]; int r = 0;
-        while (r < 2) r += in.read(header, r, 2-r);
-        int len = header[1] & 0xFF; byte[] body = new byte[len]; r = 0;
-        while (r < len) r += in.read(body, r, len-r); return body;
+        byte[] h=new byte[2]; int r=0;
+        while(r<2) r+=in.read(h,r,2-r);
+        int len=h[1]&0xFF; byte[] body=new byte[len]; r=0;
+        while(r<len) r+=in.read(body,r,len-r); return body;
     }
 }
