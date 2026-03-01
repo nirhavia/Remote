@@ -55,15 +55,15 @@ public class TvClient {
                     public void checkServerTrusted(X509Certificate[] c,String a){}
                     public X509Certificate[] getAcceptedIssuers(){return new X509Certificate[0];}
                 }}, new SecureRandom());
-                socket = (SSLSocket) ssl.getSocketFactory().createSocket();
+                socket=(SSLSocket)ssl.getSocketFactory().createSocket();
                 socket.connect(new InetSocketAddress(ip,PORT),5000);
                 socket.startHandshake();
-                out = socket.getOutputStream();
-                connected = true;
+                out=socket.getOutputStream();
+                connected=true;
                 out.write(new byte[]{0x00,0x04,0x08,0x01,0x10,0x01}); out.flush();
-                if (listener!=null) listener.onConnected();
-                InputStream inp = socket.getInputStream();
-                byte[] buf = new byte[256];
+                if(listener!=null) listener.onConnected();
+                InputStream inp=socket.getInputStream();
+                byte[] buf=new byte[256];
                 while(!socket.isClosed()){if(inp.read(buf)<0)break;}
                 connected=false; if(listener!=null) listener.onDisconnected();
             } catch(Exception e){
@@ -75,27 +75,34 @@ public class TvClient {
 
     private KeyManager[] loadCert(String ip) {
         try {
-            android.content.SharedPreferences p = ctx.getSharedPreferences(PREFS,0);
-            String keyB64  = p.getString("key_"+ip, null);
-            String certB64 = p.getString("cert_"+ip, null);
-            if (keyB64==null||certB64==null) return null;
-            PrivateKey pk = KeyFactory.getInstance("RSA")
+            android.content.SharedPreferences p=ctx.getSharedPreferences(PREFS,0);
+            String keyB64=p.getString("key_"+ip,null);
+            String certB64=p.getString("cert_"+ip,null);
+            if(keyB64==null||certB64==null) return null;
+            PrivateKey pk=KeyFactory.getInstance("RSA")
                 .generatePrivate(new PKCS8EncodedKeySpec(Base64.decode(keyB64,Base64.DEFAULT)));
-            X509Certificate cert = (X509Certificate) CertificateFactory.getInstance("X.509")
+            X509Certificate cert=(X509Certificate)CertificateFactory.getInstance("X.509")
                 .generateCertificate(new ByteArrayInputStream(Base64.decode(certB64,Base64.DEFAULT)));
-            KeyStore ks = KeyStore.getInstance("PKCS12");
+            KeyStore ks=KeyStore.getInstance("PKCS12");
             ks.load(null,null);
             ks.setKeyEntry("k",pk,new char[0],new X509Certificate[]{cert});
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            KeyManagerFactory kmf=KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             kmf.init(ks,new char[0]); return kmf.getKeyManagers();
         } catch(Exception e){ Log.e(TAG,"loadCert",e); return null; }
     }
 
-    public void savePairing(String ip, byte[] keyBytes, byte[] certBytes) {
+    public void savePairing(String ip,byte[] keyBytes,byte[] certBytes){
         ctx.getSharedPreferences(PREFS,0).edit()
             .putString("key_"+ip,  Base64.encodeToString(keyBytes,  Base64.DEFAULT))
             .putString("cert_"+ip, Base64.encodeToString(certBytes, Base64.DEFAULT))
-            .putBoolean("paired_"+ip, true).apply();
+            .putBoolean("paired_"+ip,true).apply();
+    }
+
+    // NEW: מחיקת נתוני pairing לצורך התחברות מחדש
+    public void clearPairing(String ip){
+        disconnect();
+        ctx.getSharedPreferences(PREFS,0).edit()
+            .remove("key_"+ip).remove("cert_"+ip).remove("paired_"+ip).apply();
     }
 
     public boolean isPaired(String ip){return ctx.getSharedPreferences(PREFS,0).getBoolean("paired_"+ip,false);}
@@ -109,10 +116,10 @@ public class TvClient {
             catch(Exception e){connected=false;if(listener!=null)listener.onDisconnected();}
         });
     }
-    private void send(int kc,int action) throws Exception{
+    private void send(int kc,int action)throws Exception{
         byte[] p={0x08,0x01,0x20,(byte)(kc&0x7F),0x28,(byte)(action&0x01)};
-        byte[] m=new byte[p.length+2]; m[0]=0; m[1]=(byte)p.length;
-        System.arraycopy(p,0,m,2,p.length); out.write(m); out.flush();
+        byte[] m=new byte[p.length+2];m[0]=0;m[1]=(byte)p.length;
+        System.arraycopy(p,0,m,2,p.length);out.write(m);out.flush();
     }
     public void disconnect(){connected=false;try{if(socket!=null)socket.close();}catch(Exception ignored){}}
 }
