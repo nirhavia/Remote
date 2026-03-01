@@ -11,7 +11,10 @@ import java.net.InetSocketAddress;
 import java.security.*;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
+import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.net.ssl.*;
@@ -40,57 +43,59 @@ public class TvPairing {
     public void start() {
         exec.execute(() -> {
             try {
-                // 1. צור RSA keypair ו-self-signed cert - ישמשו לחישוב ה-secret
+                // 1. צור RSA keypair ו-self-signed cert
                 KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
                 kpg.initialize(2048);
                 kp = kpg.generateKeyPair();
                 X500Name name = new X500Name("CN=YesRemote");
                 clientCert = new JcaX509CertificateConverter().getCertificate(
                     new JcaX509v3CertificateBuilder(
-                        name, BigInteger.valueOf(System.currentTimeMillis()),
+                        name, BigInteger.ONE,
                         new Date(System.currentTimeMillis() - 86400000L),
                         new Date(System.currentTimeMillis() + 3650L * 86400000L),
                         name, kp.getPublic())
                     .build(new JcaContentSignerBuilder("SHA256withRSA").build(kp.getPrivate())));
 
-                // 2. TLS ללא client certificate - הסטרימר דוחה client cert ב-pairing!
-                //    ה-cert ישלח בתוך ה-Protobuf messages, לא ב-TLS handshake
-                SSLContext ssl = SSLContext.getInstance("TLSv1.2");
-                ssl.init(
-                    null,  // אין KeyManager - אין client cert ב-TLS
+                // 2. KeyStore עם client cert
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(null, null);
+                ks.setKeyEntry("k", kp.getPrivate(), new char[0], new X509Certificate[]{clientCert});
+                KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                kmf.init(ks, new char[0]);
+
+                // 3. TLS - השתמש ב-"TLS" (ולא TLSv1.2) כדי לאפשר ניהול גרסה אוטומטי
+                SSLContext ssl = SSLContext.getInstance("TLS");
+                ssl.init(kmf.getKeyManagers(),
                     new TrustManager[]{new X509TrustManager() {
                         public void checkClientTrusted(X509Certificate[] c, String a) {}
                         public void checkServerTrusted(X509Certificate[] c, String a) {}
                         public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
                     }},
-                    new SecureRandom()
-                );
+                    new SecureRandom());
 
-                sock = (SSLSocket) ssl.getSocketFactory().createSocket();
+                SSLSocketFactory factory = ssl.getSocketFactory();
+                sock = (SSLSocket) factory.createSocket();
+
+                // 4. אפשר את כל הפרוטוקולים וה-cipher suites
+                sock.setEnabledProtocols(sock.getSupportedProtocols());
+                sock.setEnabledCipherSuites(sock.getSupportedCipherSuites());
+
                 sock.connect(new InetSocketAddress(host, PORT), 5000);
                 sock.startHandshake();
                 in  = sock.getInputStream();
                 out = sock.getOutputStream();
-                Log.d(TAG, "TLS connected to pairing port");
+                Log.d(TAG, "TLS OK. Protocol=" + sock.getSession().getProtocol()
+                    + " Cipher=" + sock.getSession().getCipherSuite());
 
-                // 3. שלח PairingRequest
+                // 5. Pairing messages
                 sendMsg(10, buildPairingRequest());
-                byte[] ack1 = readMsg();
-                Log.d(TAG, "PairingRequestAck received, len=" + ack1.length);
-
-                // 4. שלח Options
+                readMsg(); // PairingRequestAck
                 sendMsg(20, buildOptions());
-                byte[] ack2 = readMsg();
-                Log.d(TAG, "OptionsAck received, len=" + ack2.length);
-
-                // 5. שלח Configuration
+                readMsg(); // OptionsAck
                 sendMsg(30, buildConfiguration());
-                byte[] ack3 = readMsg();
-                Log.d(TAG, "ConfigurationAck received, len=" + ack3.length);
+                readMsg(); // ConfigurationAck
 
-                // הטלוויזיה מציגה PIN
                 if (cb != null) cb.onShowPin();
-
             } catch (Exception e) {
                 Log.e(TAG, "start error", e);
                 if (cb != null) cb.onError(e.getMessage());
@@ -101,10 +106,7 @@ public class TvPairing {
     public void sendPin(String pin) {
         exec.execute(() -> {
             try {
-                // קבל את ה-server cert מה-TLS session
                 X509Certificate serverCert = (X509Certificate) sock.getSession().getPeerCertificates()[0];
-
-                // חשב secret = SHA256(clientModulus + serverModulus + pinDigits)
                 RSAPublicKey cPub = (RSAPublicKey) clientCert.getPublicKey();
                 RSAPublicKey sPub = (RSAPublicKey) serverCert.getPublicKey();
                 byte[] cMod = unsigned(cPub.getModulus());
@@ -112,17 +114,11 @@ public class TvPairing {
                 byte[] pinBytes = new byte[pin.length()];
                 for (int i = 0; i < pin.length(); i++)
                     pinBytes[i] = (byte) Character.getNumericValue(pin.charAt(i));
-
                 MessageDigest sha = MessageDigest.getInstance("SHA-256");
                 sha.update(cMod); sha.update(sMod); sha.update(pinBytes);
-                byte[] secret = sha.digest();
-                Log.d(TAG, "Secret computed, sending...");
-
-                sendMsg(40, buildSecret(secret));
-                byte[] ack = readMsg();
-                Log.d(TAG, "SecretAck received, len=" + ack.length);
+                sendMsg(40, buildSecret(sha.digest()));
+                readMsg(); // SecretAck
                 sock.close();
-
                 if (cb != null) cb.onPaired(kp.getPrivate().getEncoded(), clientCert.getEncoded());
             } catch (Exception e) {
                 Log.e(TAG, "pin error", e);
@@ -151,7 +147,7 @@ public class TvPairing {
     private byte[] buildSecret(byte[] s) throws IOException {
         ByteArrayOutputStream b = new ByteArrayOutputStream(); writeBytes(b,1,s); return b.toByteArray();
     }
-    private void writeVar(ByteArrayOutputStream b, int f, int v) { b.write((f<<3)|0); b.write(v&0x7F); }
+    private void writeVar(ByteArrayOutputStream b, int f, int v) { b.write((f<<3)); b.write(v&0x7F); }
     private void writeStr(ByteArrayOutputStream b, int f, String s) throws IOException { writeBytes(b,f,s.getBytes("UTF-8")); }
     private void writeBytes(ByteArrayOutputStream b, int f, byte[] v) throws IOException {
         b.write((f<<3)|2); writeRawVar(b,v.length); b.write(v);
@@ -167,13 +163,14 @@ public class TvPairing {
         frame[0]=0x00; frame[1]=(byte)ib.length;
         System.arraycopy(ib,0,frame,2,ib.length);
         out.write(frame); out.flush();
-        Log.d(TAG, "Sent msg type=" + t + " len=" + ib.length);
+        Log.d(TAG, "Sent type=" + t);
     }
     private byte[] readMsg() throws IOException {
         byte[] h=new byte[2]; int r=0;
         while(r<2) r+=in.read(h,r,2-r);
         int len=h[1]&0xFF; byte[] body=new byte[len]; r=0;
         while(r<len) r+=in.read(body,r,len-r);
+        Log.d(TAG, "Recv len=" + len);
         return body;
     }
 }

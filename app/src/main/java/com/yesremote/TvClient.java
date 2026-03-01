@@ -48,14 +48,16 @@ public class TvClient {
         exec.execute(() -> {
             try {
                 KeyManager[] km = loadCert(ip);
-                if (km == null) { if (listener!=null) listener.onError("אין certificate - נדרש pairing"); return; }
-                SSLContext ssl = SSLContext.getInstance("TLSv1.2");
+                if (km == null) { if (listener!=null) listener.onError("אין certificate - לחץ אפס חיבור"); return; }
+                SSLContext ssl = SSLContext.getInstance("TLS");
                 ssl.init(km, new TrustManager[]{new X509TrustManager(){
                     public void checkClientTrusted(X509Certificate[] c,String a){}
                     public void checkServerTrusted(X509Certificate[] c,String a){}
                     public X509Certificate[] getAcceptedIssuers(){return new X509Certificate[0];}
                 }}, new SecureRandom());
                 socket=(SSLSocket)ssl.getSocketFactory().createSocket();
+                socket.setEnabledProtocols(socket.getSupportedProtocols());
+                socket.setEnabledCipherSuites(socket.getSupportedCipherSuites());
                 socket.connect(new InetSocketAddress(ip,PORT),5000);
                 socket.startHandshake();
                 out=socket.getOutputStream();
@@ -97,13 +99,11 @@ public class TvClient {
             .putString("cert_"+ip, Base64.encodeToString(certBytes, Base64.DEFAULT))
             .putBoolean("paired_"+ip,true).apply();
     }
-
     public void clearPairing(String ip){
         disconnect();
         ctx.getSharedPreferences(PREFS,0).edit()
             .remove("key_"+ip).remove("cert_"+ip).remove("paired_"+ip).apply();
     }
-
     public boolean isPaired(String ip){return ctx.getSharedPreferences(PREFS,0).getBoolean("paired_"+ip,false);}
     public void saveIp(String ip){ctx.getSharedPreferences(PREFS,0).edit().putString("ip",ip).apply();}
     public String getSavedIp(){return ctx.getSharedPreferences(PREFS,0).getString("ip","");}
