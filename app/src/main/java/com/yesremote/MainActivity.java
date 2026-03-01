@@ -5,6 +5,8 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     private TvClient client;
@@ -13,6 +15,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvStatus;
     private EditText etIp;
     private String currentIp = "";
+    private final List<String[]> foundDevices = new ArrayList<>(); // [name, host]
 
     @Override protected void onCreate(Bundle s) {
         super.onCreate(s);
@@ -25,10 +28,12 @@ public class MainActivity extends AppCompatActivity {
         client.setListener(new TvClient.Listener() {
             public void onConnected()    { runOnUiThread(()->setStatus("מחובר ✅",0xFF4CAF50)); }
             public void onDisconnected() { runOnUiThread(()->setStatus("מנותק",0xFFE94560)); }
-            public void onError(String m){ runOnUiThread(()->setStatus("שגיאה",0xFFFF9800)); }
+            public void onError(String m){ runOnUiThread(()->setStatus("שגיאה: "+m,0xFFFF9800)); }
         });
         startDiscovery();
-        if (!saved.isEmpty() && client.isPaired(saved)) { setStatus("מתחבר...",0xFF8892A4); client.connect(saved); }
+        if (!saved.isEmpty() && client.isPaired(saved)) {
+            setStatus("מתחבר...",0xFF8892A4); client.connect(saved);
+        }
         setupButtons();
     }
 
@@ -36,7 +41,17 @@ public class MainActivity extends AppCompatActivity {
         discovery = new TvDiscovery(this, new TvDiscovery.Listener() {
             public void onDeviceFound(String name, String host, int port) {
                 runOnUiThread(() -> {
-                    if (etIp.getText().toString().isEmpty()) { etIp.setText(host); currentIp=host; }
+                    // שמור כל מכשיר שנמצא
+                    for (String[] d : foundDevices) if (d[1].equals(host)) return;
+                    foundDevices.add(new String[]{name, host});
+                    // אם זה המכשיר הראשון - מלא אוטומטית
+                    if (etIp.getText().toString().isEmpty()) {
+                        etIp.setText(host); currentIp = host;
+                    }
+                    // אם יש יותר ממכשיר אחד - הצג כפתור בחירה
+                    if (foundDevices.size() > 1) {
+                        findViewById(R.id.btnChooseDevice).setVisibility(View.VISIBLE);
+                    }
                     setStatus("נמצא: "+name, 0xFF2196F3);
                 });
             }
@@ -45,12 +60,26 @@ public class MainActivity extends AppCompatActivity {
         discovery.start();
     }
 
+    private void showDevicePicker() {
+        String[] names = new String[foundDevices.size()];
+        for (int i=0;i<foundDevices.size();i++)
+            names[i] = foundDevices.get(i)[0] + "  (" + foundDevices.get(i)[1] + ")";
+        new AlertDialog.Builder(this)
+            .setTitle("בחר מכשיר")
+            .setItems(names, (d, which) -> {
+                String host = foundDevices.get(which)[1];
+                etIp.setText(host); currentIp = host;
+                setStatus("נבחר: "+foundDevices.get(which)[0], 0xFF2196F3);
+            }).show();
+    }
+
     private void doConnect() {
         String ip = etIp.getText().toString().trim();
         if (ip.isEmpty()) { Toast.makeText(this,"הכנס IP",Toast.LENGTH_SHORT).show(); return; }
         currentIp = ip; client.saveIp(ip);
         if (client.isPaired(ip)) { setStatus("מתחבר...",0xFF8892A4); client.connect(ip); return; }
-        setStatus("מתחיל חיבור...",0xFFFF9800);
+        // אין pairing - התחל תהליך
+        setStatus("מתחיל pairing...",0xFFFF9800);
         pairing = new TvPairing(ip, new TvPairing.Callback() {
             public void onShowPin() { runOnUiThread(()->{ setStatus("הסתכל על הטלוויזיה לקוד",0xFFFF9800); showPinDialog(); }); }
             public void onPaired(byte[] key, byte[] cert) {
@@ -62,9 +91,22 @@ public class MainActivity extends AppCompatActivity {
         pairing.start();
     }
 
+    private void doReset() {
+        new AlertDialog.Builder(this)
+            .setTitle("איפוס חיבור")
+            .setMessage("למחוק את נתוני ה-pairing ולהתחיל מחדש?")
+            .setPositiveButton("כן", (d,w) -> {
+                client.clearPairing(currentIp);
+                setStatus("נתוני חיבור נמחקו", 0xFF8892A4);
+            })
+            .setNegativeButton("ביטול", null).show();
+    }
+
     private void showPinDialog() {
         EditText pin = new EditText(this);
-        pin.setHint("קוד מהטלוויזיה"); pin.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); pin.setTextColor(0xFF000000);
+        pin.setHint("קוד מהטלוויזיה");
+        pin.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        pin.setTextColor(0xFF000000);
         new AlertDialog.Builder(this).setTitle("קוד אישור")
             .setMessage("הכנס את הקוד מהטלוויזיה:").setView(pin)
             .setPositiveButton("אשר",(d,w)->{ String p=pin.getText().toString().trim(); if(!p.isEmpty()&&pairing!=null)pairing.sendPin(p); })
@@ -75,6 +117,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupButtons(){
         findViewById(R.id.btnConnect).setOnClickListener(v->doConnect());
+        findViewById(R.id.btnReset).setOnClickListener(v->doReset());
+        findViewById(R.id.btnChooseDevice).setOnClickListener(v->showDevicePicker());
         int[] ids={R.id.btn0,R.id.btn1,R.id.btn2,R.id.btn3,R.id.btn4,R.id.btn5,R.id.btn6,R.id.btn7,R.id.btn8,R.id.btn9};
         for(int i=0;i<ids.length;i++){final int d=i;Button b=findViewById(ids[i]);if(b!=null)b.setOnClickListener(v->client.sendKey(TvClient.digit(d)));}
         bind(R.id.btnUp,TvClient.KEY_UP);bind(R.id.btnDown,TvClient.KEY_DOWN);
