@@ -4,23 +4,23 @@
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="vertical" android:padding="16dp" android:gravity="center_horizontal">
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="YES שלט" android:textColor="#E94560" android:textSize="26sp"
+            android:text="YES &#1513;&#1500;&#1496;" android:textColor="#E94560" android:textSize="26sp"
             android:textStyle="bold" android:layout_marginTop="12dp"/>
-        <TextView android:id="@+id/tvStatus" android:layout_width="wrap_content"
-            android:layout_height="wrap_content" android:text="לא מחובר"
-            android:textColor="#8892A4" android:textSize="13sp" android:layout_marginBottom="12dp"/>
+        <TextView android:id="@+id/tvStatus" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="&#1500;&#1488; &#1502;&#1495;&#1493;&#1489;&#1512;" android:textColor="#8892A4"
+            android:textSize="13sp" android:layout_marginBottom="12dp"/>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="horizontal" android:layout_marginBottom="16dp">
             <EditText android:id="@+id/etIp" android:layout_width="0dp" android:layout_height="44dp"
                 android:layout_weight="1" android:hint="192.168.1.X" android:textColorHint="#555"
                 android:textColor="#FFF" android:inputType="textUri" android:background="#1E2030"
                 android:paddingStart="12dp" android:paddingEnd="12dp" android:textSize="14sp" android:layout_marginEnd="8dp"/>
-            <Button android:id="@+id/btnConnect" android:layout_width="wrap_content"
-                android:layout_height="44dp" android:text="חבר" android:textColor="#FFF"
-                android:background="@drawable/btn_accent" android:paddingStart="20dp" android:paddingEnd="20dp"/>
+            <Button android:id="@+id/btnConnect" android:layout_width="wrap_content" android:layout_height="44dp"
+                android:text="&#1495;&#1489;&#1512;" android:textColor="#FFF" android:background="@drawable/btn_accent"
+                android:paddingStart="20dp" android:paddingEnd="20dp"/>
         </LinearLayout>
         <Button android:id="@+id/btnPower" android:layout_width="60dp" android:layout_height="60dp"
-            android:text="U+23FB" android:textSize="22sp" android:background="@drawable/btn_accent" android:layout_marginBottom="16dp"/>
+            android:text="&#x23FB;" android:textSize="22sp" android:background="@drawable/btn_accent" android:layout_marginBottom="16dp"/>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:layout_marginBottom="12dp">
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="CH" android:textColor="#8892A4" android:textSize="11sp"/>
@@ -43,13 +43,13 @@
             </LinearLayout>
         </LinearLayout>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:layout_marginBottom="20dp">
-            <Button android:id="@+id/btnBack" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="חזור" android:textColor="#CCC" android:background="@drawable/btn_ctrl" android:layout_margin="3dp"/>
-            <Button android:id="@+id/btnHome" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="בית" android:textColor="#CCC" android:background="@drawable/btn_ctrl" android:layout_margin="3dp"/>
-            <Button android:id="@+id/btnMute" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="השתק" android:textColor="#CCC" android:background="@drawable/btn_ctrl" android:layout_margin="3dp"/>
-            <Button android:id="@+id/btnMenu" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="תפריט" android:textColor="#CCC" android:background="@drawable/btn_ctrl" android:layout_margin="3dp"/>
+            <Button android:id="@+id/btnBack" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="&#1495;&#1494;&#1493;&#1512;" android:textColor="#CCC" android:background="@drawable/btn_ctrl" android:layout_margin="3dp"/>
+            <Button android:id="@+id/btnHome" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="&#1489;&#1497;&#1514;" android:textColor="#CCC" android:background="@drawable/btn_ctrl" android:layout_margin="3dp"/>
+            <Button android:id="@+id/btnMute" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="&#1492;&#1513;&#1514;&#1511;" android:textColor="#CCC" android:background="@drawable/btn_ctrl" android:layout_margin="3dp"/>
+            <Button android:id="@+id/btnMenu" android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1" android:text="&#1514;&#1508;&#1512;&#1497;&#1496;" android:textColor="#CCC" android:background="@drawable/btn_ctrl" android:layout_margin="3dp"/>
         </LinearLayout>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="מספר ערוץ" android:textColor="#8892A4" android:textSize="12sp" android:layout_marginBottom="8dp"/>
+            android:text="&#1502;&#1505;&#1508;&#1512; &#1506;&#1512;&#1493;&#1509;" android:textColor="#8892A4" android:textSize="12sp" android:layout_marginBottom="8dp"/>
         <LinearLayout android:layout_width="180dp" android:layout_height="wrap_content" android:orientation="vertical">
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                 <Button android:id="@+id/btn1" android:layout_width="0dp" android:layout_height="52dp" android:layout_weight="1" android:text="1" android:textSize="20sp" android:textColor="#FFF" android:textStyle="bold" android:background="@drawable/btn_num" android:layout_margin="3dp"/>
