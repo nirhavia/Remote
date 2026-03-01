@@ -23,7 +23,7 @@ public class TvClient {
     }
 
     public static final int
-        KEY_0=7,  KEY_1=8,  KEY_2=9,  KEY_3=10, KEY_4=11,
+        KEY_0=7, KEY_1=8, KEY_2=9, KEY_3=10, KEY_4=11,
         KEY_5=12, KEY_6=13, KEY_7=14, KEY_8=15, KEY_9=16,
         KEY_UP=19, KEY_DOWN=20, KEY_LEFT=21, KEY_RIGHT=22,
         KEY_OK=23, KEY_BACK=4, KEY_HOME=3, KEY_MENU=82,
@@ -31,7 +31,7 @@ public class TvClient {
         KEY_MUTE=164, KEY_CH_UP=166, KEY_CH_DOWN=167,
         KEY_LAST_CHANNEL=229;
 
-    public static int digit(int d) { return KEY_0 + d; }
+    public static int digit(int d) { return KEY_0+d; }
 
     private final Context ctx;
     private final ExecutorService exec = Executors.newCachedThreadPool();
@@ -48,74 +48,71 @@ public class TvClient {
         exec.execute(() -> {
             try {
                 KeyManager[] km = loadCert(ip);
-                if (km == null) { if (listener != null) listener.onError("אין certificate"); return; }
+                if (km == null) { if (listener!=null) listener.onError("אין certificate - נדרש pairing"); return; }
                 SSLContext ssl = SSLContext.getInstance("TLSv1.2");
-                ssl.init(km, new TrustManager[]{new X509TrustManager() {
-                    public void checkClientTrusted(X509Certificate[] c, String a) {}
-                    public void checkServerTrusted(X509Certificate[] c, String a) {}
-                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                ssl.init(km, new TrustManager[]{new X509TrustManager(){
+                    public void checkClientTrusted(X509Certificate[] c,String a){}
+                    public void checkServerTrusted(X509Certificate[] c,String a){}
+                    public X509Certificate[] getAcceptedIssuers(){return new X509Certificate[0];}
                 }}, new SecureRandom());
                 socket = (SSLSocket) ssl.getSocketFactory().createSocket();
-                socket.connect(new InetSocketAddress(ip, PORT), 5000);
+                socket.connect(new InetSocketAddress(ip,PORT),5000);
                 socket.startHandshake();
                 out = socket.getOutputStream();
                 connected = true;
-                out.write(new byte[]{0x00, 0x04, 0x08, 0x01, 0x10, 0x01}); out.flush();
-                if (listener != null) listener.onConnected();
+                out.write(new byte[]{0x00,0x04,0x08,0x01,0x10,0x01}); out.flush();
+                if (listener!=null) listener.onConnected();
                 InputStream inp = socket.getInputStream();
                 byte[] buf = new byte[256];
-                while (!socket.isClosed()) { if (inp.read(buf) < 0) break; }
-                connected = false;
-                if (listener != null) listener.onDisconnected();
-            } catch (Exception e) {
-                connected = false; if (listener != null) listener.onError(e.getMessage());
+                while(!socket.isClosed()){if(inp.read(buf)<0)break;}
+                connected=false; if(listener!=null) listener.onDisconnected();
+            } catch(Exception e){
+                Log.e(TAG,"connect",e);
+                connected=false; if(listener!=null) listener.onError(e.getMessage());
             }
         });
     }
 
     private KeyManager[] loadCert(String ip) {
         try {
-            android.content.SharedPreferences prefs = ctx.getSharedPreferences(PREFS, 0);
-            String keyB64  = prefs.getString("key_"  + ip, null);
-            String certB64 = prefs.getString("cert_" + ip, null);
-            if (keyB64 == null || certB64 == null) return null;
-            byte[] keyBytes  = Base64.decode(keyB64,  Base64.DEFAULT);
-            byte[] certBytes = Base64.decode(certB64, Base64.DEFAULT);
-            PrivateKey pk = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(keyBytes));
+            android.content.SharedPreferences p = ctx.getSharedPreferences(PREFS,0);
+            String keyB64  = p.getString("key_"+ip, null);
+            String certB64 = p.getString("cert_"+ip, null);
+            if (keyB64==null||certB64==null) return null;
+            PrivateKey pk = KeyFactory.getInstance("RSA")
+                .generatePrivate(new PKCS8EncodedKeySpec(Base64.decode(keyB64,Base64.DEFAULT)));
             X509Certificate cert = (X509Certificate) CertificateFactory.getInstance("X.509")
-                .generateCertificate(new ByteArrayInputStream(certBytes));
+                .generateCertificate(new ByteArrayInputStream(Base64.decode(certB64,Base64.DEFAULT)));
             KeyStore ks = KeyStore.getInstance("PKCS12");
-            ks.load(null, null);
-            ks.setKeyEntry("k", pk, new char[0], new X509Certificate[]{cert});
+            ks.load(null,null);
+            ks.setKeyEntry("k",pk,new char[0],new X509Certificate[]{cert});
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, new char[0]); return kmf.getKeyManagers();
-        } catch (Exception e) { Log.e(TAG, "loadCert error", e); return null; }
+            kmf.init(ks,new char[0]); return kmf.getKeyManagers();
+        } catch(Exception e){ Log.e(TAG,"loadCert",e); return null; }
     }
 
     public void savePairing(String ip, byte[] keyBytes, byte[] certBytes) {
-        ctx.getSharedPreferences(PREFS, 0).edit()
-            .putString("key_"  + ip, Base64.encodeToString(keyBytes,  Base64.DEFAULT))
-            .putString("cert_" + ip, Base64.encodeToString(certBytes, Base64.DEFAULT))
-            .putBoolean("paired_" + ip, true).apply();
+        ctx.getSharedPreferences(PREFS,0).edit()
+            .putString("key_"+ip,  Base64.encodeToString(keyBytes,  Base64.DEFAULT))
+            .putString("cert_"+ip, Base64.encodeToString(certBytes, Base64.DEFAULT))
+            .putBoolean("paired_"+ip, true).apply();
     }
 
-    public boolean isPaired(String ip) { return ctx.getSharedPreferences(PREFS,0).getBoolean("paired_"+ip,false); }
-    public void saveIp(String ip) { ctx.getSharedPreferences(PREFS,0).edit().putString("ip",ip).apply(); }
-    public String getSavedIp() { return ctx.getSharedPreferences(PREFS,0).getString("ip",""); }
+    public boolean isPaired(String ip){return ctx.getSharedPreferences(PREFS,0).getBoolean("paired_"+ip,false);}
+    public void saveIp(String ip){ctx.getSharedPreferences(PREFS,0).edit().putString("ip",ip).apply();}
+    public String getSavedIp(){return ctx.getSharedPreferences(PREFS,0).getString("ip","");}
 
-    public void sendKey(int kc) {
-        if (!connected || out == null) return;
-        exec.execute(() -> {
-            try { send(kc, 1); Thread.sleep(80); send(kc, 0); }
-            catch (Exception e) { connected = false; if (listener != null) listener.onDisconnected(); }
+    public void sendKey(int kc){
+        if(!connected||out==null) return;
+        exec.execute(()->{
+            try{send(kc,1);Thread.sleep(80);send(kc,0);}
+            catch(Exception e){connected=false;if(listener!=null)listener.onDisconnected();}
         });
     }
-
-    private void send(int kc, int action) throws Exception {
-        byte[] p = {0x08,0x01,0x20,(byte)(kc&0x7F),0x28,(byte)(action&0x01)};
-        byte[] m = new byte[p.length+2]; m[0]=0; m[1]=(byte)p.length;
+    private void send(int kc,int action) throws Exception{
+        byte[] p={0x08,0x01,0x20,(byte)(kc&0x7F),0x28,(byte)(action&0x01)};
+        byte[] m=new byte[p.length+2]; m[0]=0; m[1]=(byte)p.length;
         System.arraycopy(p,0,m,2,p.length); out.write(m); out.flush();
     }
-
-    public void disconnect() { connected=false; try{if(socket!=null)socket.close();}catch(Exception ignored){} }
+    public void disconnect(){connected=false;try{if(socket!=null)socket.close();}catch(Exception ignored){}}
 }
