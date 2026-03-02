@@ -1,17 +1,14 @@
 package com.yesremote;
 
+import android.util.Base64;
 import android.util.Log;
-import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import java.io.*;
-import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.security.*;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
-import java.util.Date;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.net.ssl.*;
@@ -19,6 +16,8 @@ import javax.net.ssl.*;
 public class TvPairing {
     private static final String TAG = "TvPairing";
     private static final int PORT = 6466;
+    private static final String KEY_B64  = "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCs5l1Sql1WRNNn8mnnWW9rhTzRAkrnpXrjKwOe6oRWEmFE1x7uP9x70GOPwbw8OKHCvh913He63QQLfyBVfVupKVDbK3HOGQ3Z8b9dUaWDF89uwOd5bVJQIO9qTtEBbapQK7jzJzWS/YtnXqtvYmmCfKAIbtEXemK1A4DFxDAlvc99LTooY8EegcKVBIclG5nhXQo1hVcbLvYIfM8VHAMrhK/O1dufyOodlOYYi/Ac8tFiHiWl6m6QiWKbCFmN5Gp1fE9WOuFYmkRbYV/f2vNH8H14D+eYqEQYSlnnidwfW8LkYDMwv7vkHNP2FNbIV6jTheysxJGll9T29wuxjydNAgMBAAECggEAANUx4+EK3AyEJtRbFZCFDIkywXWiXg/vp0J2HQDXgav1qKWPR5R/1QosQJgCoRj2ESsQmbplypJKn7I4D1Fa7KtUnAmkiFqZ33qI8m50k/dnD2CB0kA9jOyWWqEQjqeJkiNJG8ViPlgBoOOALeQqdUTGZzlUFn8yFIR0zVRkQE+ctaedJvf8hnoOEjoG94hbBSY4GD0JoKFrR/mFLprbieFwkLcuTJA+oAB/Q9HE99ynXTEiaKAurDptLsq9woohmZRqhcZF7S6PbTmnxZ8wWb8h11drcXr9zPQfl1c6Bgxc/nWlkuBGlaTH0NrErBmSFjaIjG43RCW7M+AqEF613QKBgQDd60FhfgCWyxzMDWFNttczf284nU7c1/qT3ElSDQgZs+83SPvf+LOIKCZrGhpMF7xIHpP+38kxGKRwZpMtbga0446+SOLy1tbilT07+u4Jn5NWCJPDO8tuSIApLPtljIXWoWMMpdiEqaXYMy0ZUT05VEnnKFGV3LxdRiy60AF/kwKBgQDHc+xF8i6XbsR8HQx+uJ2zSWfPD5cX3LZ7iNBr5kE16WjGhYRHAtL/5nbqHLFXAXb2D4C+Wg9tQO/3by4rWyfvp4qLOH2/6XHKS1iWBJXjw0aCsTu1VtVO9oIcnlHie0YTD+sC+dwHciBgWUYyn7nG/PlxrXWplK+pNX5nJ8BJnwKBgAPha0FDLMt2PcirqznqqpSx88XvqkNeW3lebsHKjIu2g8ZZtl3SQYFuAk35JOCTwa0ZK8lXLHN5VNbKVGSE+gULvaFCMQXCD/viVDHKT4NHkRH+EGdnkkUZa3RM3xCFhomcRNkhxUl8lfPT4UQCEaoA+VHbeKHAPGL9KScTIBOVAoGBAIxV5EjSvjWOmnE5fzEqdMtROtlV/tmrUjpZaUyCFh/4ut/z0b6lHhEv9zuCNMUjIrC+97b3ZyNYLX/LmpCm8tKM785FUTVW69mKaiojz9MR8urCCWDuV+fXSnUYcEUKt6Nx78mIRGh4xI8GQX4dJHn+RQTXJ5LKK07DdMzgC0vBAoGBALtSdq8f0LuOjJeiGC95uPNSClb4mD71XDevOq7SbQ/rfrit9IJSBUtxhCSZnRJrmJSDNhoVE4Zc1X2EKKn8Poej0/KywYFowFrb9eL9XEQDgSdyNrKJH2hWRA+unpiIFSlvi23R1tXDa4JKK6Rt4teVVEIA4tMg1kdQ374vwYbN";
+    private static final String CERT_B64 = "MIICtDCCAZygAwIBAgIUbJPs5F9IELXMIfMYdMSEy+IHKTAwDQYJKoZIhvcNAQELBQAwFDESMBAGA1UEAwwJWWVzUmVtb3RlMB4XDTIzMDEwMTAwMDAwMFoXDTM1MDEwMTAwMDAwMFowFDESMBAGA1UEAwwJWWVzUmVtb3RlMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArOZdUqpdVkTTZ/Jp51lva4U80QJK56V64ysDnuqEVhJhRNce7j/ce9Bjj8G8PDihwr4fddx3ut0EC38gVX1bqSlQ2ytxzhkN2fG/XVGlgxfPbsDneW1SUCDvak7RAW2qUCu48yc1kv2LZ16rb2JpgnygCG7RF3pitQOAxcQwJb3PfS06KGPBHoHClQSHJRuZ4V0KNYVXGy72CHzPFRwDK4SvztXbn8jqHZTmGIvwHPLRYh4lpepukIlimwhZjeRqdXxPVjrhWJpEW2Ff39rzR/B9eA/nmKhEGEpZ54ncH1vC5GAzML+75BzT9hTWyFeo04XsrMSRpZfU9vcLsY8nTQIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQCAUO8mzh/fuFM+l9m35OkN+QawVsG9dflfSCBmvPKK4zav+zoI48iiJ7G6WuwkRd2oYpjca/hEjSCFvbFgvWdf788y5a7DNr3Y6+uE/kZDdoRnjaEx3JGYi77Rjoj8AHyIci2XlJVU64AStVafU0BmgkHskv5ZJk9f7Feg4CXeevJbA2m4Uno6Tkkyv9dQLD+8BZY6YNrstGLsSENzQM0cEG06ozayBZ3epLMcGEfcnlB6mWnEe9kNQU5ISP2irHBggwbw1bI0gtgNUX9+hdu3dcFdcGeNx7ipgJs9SdvXRMvK6vDSaiIRavB0bE7faYwxUSqhUJLxQZWmQT1hHl3c";
 
     public interface Callback {
         void onShowPin();
@@ -32,29 +31,25 @@ public class TvPairing {
     private SSLSocket sock;
     private InputStream in;
     private OutputStream out;
-    private KeyPair kp;
+    private PrivateKey privKey;
     private X509Certificate clientCert;
 
     public TvPairing(String host, Callback cb) { this.host = host; this.cb = cb; }
 
+    private void loadCert() throws Exception {
+        privKey = KeyFactory.getInstance("RSA")
+            .generatePrivate(new PKCS8EncodedKeySpec(Base64.decode(KEY_B64, Base64.DEFAULT)));
+        clientCert = (X509Certificate) CertificateFactory.getInstance("X.509")
+            .generateCertificate(new ByteArrayInputStream(Base64.decode(CERT_B64, Base64.DEFAULT)));
+    }
+
     public void start() {
         exec.execute(() -> {
             try {
-                KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-                kpg.initialize(2048);
-                kp = kpg.generateKeyPair();
-                X500Name name = new X500Name("CN=YesRemote");
-                clientCert = new JcaX509CertificateConverter().getCertificate(
-                    new JcaX509v3CertificateBuilder(
-                        name, BigInteger.ONE,
-                        new Date(System.currentTimeMillis() - 86400000L),
-                        new Date(System.currentTimeMillis() + 3650L * 86400000L),
-                        name, kp.getPublic())
-                    .build(new JcaContentSignerBuilder("SHA256withRSA").build(kp.getPrivate())));
-
+                loadCert();
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 ks.load(null, null);
-                ks.setKeyEntry("k", kp.getPrivate(), new char[0], new X509Certificate[]{clientCert});
+                ks.setKeyEntry("k", privKey, new char[0], new X509Certificate[]{clientCert});
                 KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 kmf.init(ks, new char[0]);
                 SSLContext ssl = SSLContext.getInstance("TLS");
@@ -63,7 +58,6 @@ public class TvPairing {
                     public void checkServerTrusted(X509Certificate[] c, String a) {}
                     public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
                 }}, new SecureRandom());
-
                 sock = (SSLSocket) ssl.getSocketFactory().createSocket();
                 sock.setEnabledProtocols(sock.getSupportedProtocols());
                 sock.setEnabledCipherSuites(sock.getSupportedCipherSuites());
@@ -72,7 +66,6 @@ public class TvPairing {
                 in = sock.getInputStream();
                 out = sock.getOutputStream();
                 Log.d(TAG, "TLS OK: " + sock.getSession().getProtocol());
-
                 sendMsg(10, buildPairingRequest());
                 readMsg();
                 sendMsg(20, buildOptions());
@@ -90,21 +83,19 @@ public class TvPairing {
     public void sendPin(String pin) {
         exec.execute(() -> {
             try {
-                X509Certificate serverCert = (X509Certificate) sock.getSession().getPeerCertificates()[0];
-                RSAPublicKey cPub = (RSAPublicKey) clientCert.getPublicKey();
-                RSAPublicKey sPub = (RSAPublicKey) serverCert.getPublicKey();
-                byte[] cMod = unsigned(cPub.getModulus());
-                byte[] sMod = unsigned(sPub.getModulus());
-
-                // תיקון: PIN עם אותיות ומספרים - משתמש ב-UTF-8 bytes ישירות
+                X509Certificate srv = (X509Certificate) sock.getSession().getPeerCertificates()[0];
+                byte[] cMod = unsigned(((RSAPublicKey) clientCert.getPublicKey()).getModulus());
+                byte[] sMod = unsigned(((RSAPublicKey) srv.getPublicKey()).getModulus());
+                // PIN עם אותיות ומספרים - UTF-8 bytes
                 byte[] pinBytes = pin.getBytes("UTF-8");
-
                 MessageDigest sha = MessageDigest.getInstance("SHA-256");
                 sha.update(cMod); sha.update(sMod); sha.update(pinBytes);
                 sendMsg(40, buildSecret(sha.digest()));
                 readMsg();
                 sock.close();
-                if (cb != null) cb.onPaired(kp.getPrivate().getEncoded(), clientCert.getEncoded());
+                if (cb != null) cb.onPaired(
+                    Base64.decode(KEY_B64, Base64.DEFAULT),
+                    Base64.decode(CERT_B64, Base64.DEFAULT));
             } catch (Exception e) {
                 Log.e(TAG, "pin", e);
                 if (cb != null) cb.onError(e.getMessage());
@@ -122,8 +113,7 @@ public class TvPairing {
         writeStr(b,1,"YES Remote"); writeStr(b,2,"Android"); return b.toByteArray();
     }
     private byte[] buildOptions() throws IOException {
-        ByteArrayOutputStream b = new ByteArrayOutputStream();
-        ByteArrayOutputStream e = new ByteArrayOutputStream();
+        ByteArrayOutputStream b = new ByteArrayOutputStream(), e = new ByteArrayOutputStream();
         writeVar(e,1,3); writeBytes(b,1,e.toByteArray()); writeVar(b,2,1); return b.toByteArray();
     }
     private byte[] buildConfiguration() throws IOException {
@@ -138,7 +128,7 @@ public class TvPairing {
         b.write((f<<3)|2); writeRawVar(b,v.length); b.write(v);
     }
     private void writeRawVar(ByteArrayOutputStream b, int v) {
-        while((v&~0x7F)!=0){b.write((v&0x7F)|0x80);v>>>=7;} b.write(v);
+        while((v&~0x7F)!=0){b.write((v&0x7F)|0x80);v>>>=7;}b.write(v);
     }
     private void sendMsg(int t, byte[] p) throws IOException {
         ByteArrayOutputStream w = new ByteArrayOutputStream();
