@@ -1,4 +1,5 @@
 package com.yesremote;
+import android.content.Context;
 import android.os.IBinder;
 import android.content.ServiceConnection;
 import android.content.ComponentName;
@@ -53,12 +54,12 @@ public class MainActivity extends AppCompatActivity {
         startDiscovery();
         if (!saved.isEmpty() && client.isPaired(saved)) {
             setStatus("מתחבר...",0xFF8892A4); // הפעל service עם IP חדש
-                Intent si = new Intent(this, RemoteService.class);
+                Intent si = new Intent(MainActivity.this, RemoteService.class);
                 si.putExtra("ip", saved);
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    startForegroundService(si);
+                    MainActivity.this.startForegroundService(si);
                 } else {
-                    startService(si);
+                    MainActivity.this.startService(si);
                 }
                 if (remoteService != null) client = remoteService.getClient();
         }
