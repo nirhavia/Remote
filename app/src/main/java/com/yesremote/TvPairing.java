@@ -15,9 +15,10 @@ import javax.net.ssl.*;
 
 public class TvPairing {
     private static final String TAG = "TvPairing";
-    private static final int PORT = 6466;
-    private static final String KEY_B64  = "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCs5l1Sql1WRNNn8mnnWW9rhTzRAkrnpXrjKwOe6oRWEmFE1x7uP9x70GOPwbw8OKHCvh913He63QQLfyBVfVupKVDbK3HOGQ3Z8b9dUaWDF89uwOd5bVJQIO9qTtEBbapQK7jzJzWS/YtnXqtvYmmCfKAIbtEXemK1A4DFxDAlvc99LTooY8EegcKVBIclG5nhXQo1hVcbLvYIfM8VHAMrhK/O1dufyOodlOYYi/Ac8tFiHiWl6m6QiWKbCFmN5Gp1fE9WOuFYmkRbYV/f2vNH8H14D+eYqEQYSlnnidwfW8LkYDMwv7vkHNP2FNbIV6jTheysxJGll9T29wuxjydNAgMBAAECggEAANUx4+EK3AyEJtRbFZCFDIkywXWiXg/vp0J2HQDXgav1qKWPR5R/1QosQJgCoRj2ESsQmbplypJKn7I4D1Fa7KtUnAmkiFqZ33qI8m50k/dnD2CB0kA9jOyWWqEQjqeJkiNJG8ViPlgBoOOALeQqdUTGZzlUFn8yFIR0zVRkQE+ctaedJvf8hnoOEjoG94hbBSY4GD0JoKFrR/mFLprbieFwkLcuTJA+oAB/Q9HE99ynXTEiaKAurDptLsq9woohmZRqhcZF7S6PbTmnxZ8wWb8h11drcXr9zPQfl1c6Bgxc/nWlkuBGlaTH0NrErBmSFjaIjG43RCW7M+AqEF613QKBgQDd60FhfgCWyxzMDWFNttczf284nU7c1/qT3ElSDQgZs+83SPvf+LOIKCZrGhpMF7xIHpP+38kxGKRwZpMtbga0446+SOLy1tbilT07+u4Jn5NWCJPDO8tuSIApLPtljIXWoWMMpdiEqaXYMy0ZUT05VEnnKFGV3LxdRiy60AF/kwKBgQDHc+xF8i6XbsR8HQx+uJ2zSWfPD5cX3LZ7iNBr5kE16WjGhYRHAtL/5nbqHLFXAXb2D4C+Wg9tQO/3by4rWyfvp4qLOH2/6XHKS1iWBJXjw0aCsTu1VtVO9oIcnlHie0YTD+sC+dwHciBgWUYyn7nG/PlxrXWplK+pNX5nJ8BJnwKBgAPha0FDLMt2PcirqznqqpSx88XvqkNeW3lebsHKjIu2g8ZZtl3SQYFuAk35JOCTwa0ZK8lXLHN5VNbKVGSE+gULvaFCMQXCD/viVDHKT4NHkRH+EGdnkkUZa3RM3xCFhomcRNkhxUl8lfPT4UQCEaoA+VHbeKHAPGL9KScTIBOVAoGBAIxV5EjSvjWOmnE5fzEqdMtROtlV/tmrUjpZaUyCFh/4ut/z0b6lHhEv9zuCNMUjIrC+97b3ZyNYLX/LmpCm8tKM785FUTVW69mKaiojz9MR8urCCWDuV+fXSnUYcEUKt6Nx78mIRGh4xI8GQX4dJHn+RQTXJ5LKK07DdMzgC0vBAoGBALtSdq8f0LuOjJeiGC95uPNSClb4mD71XDevOq7SbQ/rfrit9IJSBUtxhCSZnRJrmJSDNhoVE4Zc1X2EKKn8Poej0/KywYFowFrb9eL9XEQDgSdyNrKJH2hWRA+unpiIFSlvi23R1tXDa4JKK6Rt4teVVEIA4tMg1kdQ374vwYbN";
-    private static final String CERT_B64 = "MIICtDCCAZygAwIBAgIUbJPs5F9IELXMIfMYdMSEy+IHKTAwDQYJKoZIhvcNAQELBQAwFDESMBAGA1UEAwwJWWVzUmVtb3RlMB4XDTIzMDEwMTAwMDAwMFoXDTM1MDEwMTAwMDAwMFowFDESMBAGA1UEAwwJWWVzUmVtb3RlMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArOZdUqpdVkTTZ/Jp51lva4U80QJK56V64ysDnuqEVhJhRNce7j/ce9Bjj8G8PDihwr4fddx3ut0EC38gVX1bqSlQ2ytxzhkN2fG/XVGlgxfPbsDneW1SUCDvak7RAW2qUCu48yc1kv2LZ16rb2JpgnygCG7RF3pitQOAxcQwJb3PfS06KGPBHoHClQSHJRuZ4V0KNYVXGy72CHzPFRwDK4SvztXbn8jqHZTmGIvwHPLRYh4lpepukIlimwhZjeRqdXxPVjrhWJpEW2Ff39rzR/B9eA/nmKhEGEpZ54ncH1vC5GAzML+75BzT9hTWyFeo04XsrMSRpZfU9vcLsY8nTQIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQCAUO8mzh/fuFM+l9m35OkN+QawVsG9dflfSCBmvPKK4zav+zoI48iiJ7G6WuwkRd2oYpjca/hEjSCFvbFgvWdf788y5a7DNr3Y6+uE/kZDdoRnjaEx3JGYi77Rjoj8AHyIci2XlJVU64AStVafU0BmgkHskv5ZJk9f7Feg4CXeevJbA2m4Uno6Tkkyv9dQLD+8BZY6YNrstGLsSENzQM0cEG06ozayBZ3epLMcGEfcnlB6mWnEe9kNQU5ISP2irHBggwbw1bI0gtgNUX9+hdu3dcFdcGeNx7ipgJs9SdvXRMvK6vDSaiIRavB0bE7faYwxUSqhUJLxQZWmQT1hHl3c";
+    // פורט 6467 = pairing (לא 6466!)
+    private static final int PORT = 6467;
+    private static final String KEY_B64  = "MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDKeTyySZZ3B5tL7AxBwpUFtxM8vtVALKI1wtKdbSqzK4+TtMzZPXpBwkFc0zJleSBIBLoiBrQ6FIZkW2uv0MELSMsCU+8ffhYN9C7R/bwE+FL+Q1idRPzFmpapJTlMCEKGqWraI848ciK3fJ65j4KuCLEAw6Y1pqQwBDyBLAzBE6vi3IvO4L7CubS9ChQd9ShAGZQM7KdXgDY9jRCghOfZPuK3FudR1AdzjKikdpilf4UERzYFGD5DWUwdpDsGLxBErF5Q85TlJ6brh2AzY0rQf2eeGgh5tjwQUvgQP0LjHbz9nM+d4bZCtQ1hHniEuW+oD/MxeQhw6qjkQvCdupOlAgMBAAECggEACXhOrbMR6crOCWjGsPuyHySPLofpbvk3dAbC9ZCBzwQCUOEDtMRyl6lHh9kr8gGOkDfCYe2I1++WUpLREFXV9ZpnvlnhJQqvauMpHnK87MmVjiVlu2Na5D4k/k/KpIL9Y5GAeSf0ETEwbP8T6G9tKAkpiDTebQN4ifNkxhDintQghMTFHzPhGd5BFPcyQfPCMc0np000v7iLNrJZGcjZ/1hdnXcQrnmcNnnrfZXRY1fKo/UQ5aoB56Ybr16YLiJRlsDNfXzFiXXT+7tfYHfjobsjZNJxmwddkE9v0mezNT6nspkcPWr45P5Y/BJ4a0yEEDrasWi6ctksDqyWBk+/eQKBgQD/voMjSpqP7KIFYuOuboqVuOCWdBM5s0Dm3IfM9K0gwyBDqaEa/voWgu/fNaCpi9Rcy24ProUAb9oeWBXY7j/C4K4VT0qxqq2NtMZKfnfp0+2Yal41D6Noo3TQQw9DQCkN6ThgzmB/GYyAJ6Zf3/1Qne5rV5bomdnYpuzN6B2kHQKBgQDKrRV/Ua8Iq1gPS22Dl7zoYOalku5ttdhMKhULiXAcFxITgpPUwWc8aTh3CwyOZSx2pPw9LoQT0zQRu5gmhuMRwOozLzI/+bM1NTihTCrH2TLRxgbp3J6KtYxcThgKajJYU4a1jAa7mbgJENeJLkriSAtyaDPbhFUIoFVuEjCHKQKBgQDCTHyXUHPTSuXhj7sJaERz8ez3gaKloNF7VCr8hRwPmw+lOHgE6ZkZh0s02yqABZNHGOs6kM3Ngi1GBog6su/QYCECYaaPCuwmkCRirmjuRqvps051o7bzpdP28ivjXRiT0A+cRM89YSzEpNsbVjK/j+12siod991xY4jf+yyh5QKBgQCeH/oEsnsIHX5/uE6B+5G0D14D0iXZTKWrjq2KqbjhAZLly9uAg0ADHuih3+n08rSFAGWXakI7oW0fZKfpbxWblVJjiq/+v9b0bUh4d49tCmUeyww7yxeaitgub/NLtN0AknIoFE5wcRbnY891RLvB3Ymowemrm4woRcdBMEnSOQKBgQCZ1eK3iQt1IYSUqQw1ebvf+icho1+tUr1RaMUl6h0wDJEpz1qZMhREY9DWR0a9jcJ6M05QJ4dbLPfUCFL695u3JKPMHML6bDEtGgivKNxoZT1lbPq5lNqjitNzzfmn8nI0P4cwq//PUZdE4rp0P4oHMm5hS8BoGC9BR+Qg01lGlg==";
+    private static final String CERT_B64 = "MIICszCCAZugAwIBAgITVy8c46h9+P5xuSE/o4HxoNAuJTANBgkqhkiG9w0BAQsFADAUMRIwEAYDVQQDDAlhdHZyZW1vdGUwHhcNMjMwMTAxMDAwMDAwWhcNMzUwMTAxMDAwMDAwWjAUMRIwEAYDVQQDDAlhdHZyZW1vdGUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDKeTyySZZ3B5tL7AxBwpUFtxM8vtVALKI1wtKdbSqzK4+TtMzZPXpBwkFc0zJleSBIBLoiBrQ6FIZkW2uv0MELSMsCU+8ffhYN9C7R/bwE+FL+Q1idRPzFmpapJTlMCEKGqWraI848ciK3fJ65j4KuCLEAw6Y1pqQwBDyBLAzBE6vi3IvO4L7CubS9ChQd9ShAGZQM7KdXgDY9jRCghOfZPuK3FudR1AdzjKikdpilf4UERzYFGD5DWUwdpDsGLxBErF5Q85TlJ6brh2AzY0rQf2eeGgh5tjwQUvgQP0LjHbz9nM+d4bZCtQ1hHniEuW+oD/MxeQhw6qjkQvCdupOlAgMBAAEwDQYJKoZIhvcNAQELBQADggEBAAeu5fiATvFbBGhpqU1lvQrEjUxLCUh0mXcE3Bs8BpqwcHhwYv/TfCs3ktPxePCDFLklNT+KHbOXQn4GLu6nUT7AM0HL3H17FZNVgPrUc5iQwKFH4ZqfPNvWApyo/0JPA41zY6BlhKWMSgxzY9+wwJoGp+G11aRvI9hchCWC8rKNh57MLR4SqFaW1+VNSLWbSg8vsa1QiHJn9i2JnmCsqPVcHMF1UzVYr4r9kkrgvhehmdADmEV6DmdMgL/gesuhUE9gy9gGXf23WQWOjKtptgQsPHH3OQnVBNYV03hr0H+Tsz49czPOX31bgPdhC+Hp/gtpljunWBV7gIgJj2Z84fg=";
 
     public interface Callback {
         void onShowPin();
@@ -65,13 +66,18 @@ public class TvPairing {
                 sock.startHandshake();
                 in = sock.getInputStream();
                 out = sock.getOutputStream();
-                Log.d(TAG, "TLS OK: " + sock.getSession().getProtocol());
-                sendMsg(10, buildPairingRequest());
+                Log.d(TAG, "TLS OK port 6467: " + sock.getSession().getProtocol());
+
+                // 1. PairingRequest
+                sendMsg(buildPairingRequest());
                 readMsg();
-                sendMsg(20, buildOptions());
+                // 2. Options
+                sendMsg(new byte[]{8,2,16,(byte)200,1,(byte)162,1,8,10,4,8,3,16,6,24,1});
                 readMsg();
-                sendMsg(30, buildConfiguration());
+                // 3. Configuration
+                sendMsg(new byte[]{8,2,16,(byte)200,1,(byte)242,1,8,10,4,8,3,16,6,16,1});
                 readMsg();
+
                 if (cb != null) cb.onShowPin();
             } catch (Exception e) {
                 Log.e(TAG, "start", e);
@@ -81,16 +87,34 @@ public class TvPairing {
     }
 
     public void sendPin(String pin) {
+        // PIN הוא 6 תווים HEX, לוקחים 4 האחרונים ומ-decode-ים מ-hex
         exec.execute(() -> {
             try {
                 X509Certificate srv = (X509Certificate) sock.getSession().getPeerCertificates()[0];
-                byte[] cMod = unsigned(((RSAPublicKey) clientCert.getPublicKey()).getModulus());
-                byte[] sMod = unsigned(((RSAPublicKey) srv.getPublicKey()).getModulus());
-                // PIN עם אותיות ומספרים - UTF-8 bytes
-                byte[] pinBytes = pin.getBytes("UTF-8");
+                RSAPublicKey cPub = (RSAPublicKey) clientCert.getPublicKey();
+                RSAPublicKey sPub = (RSAPublicKey) srv.getPublicKey();
+
+                // Secret = SHA256(clientMod + clientExp + serverMod + serverExp + hex2bin(last4))
+                byte[] cMod = unsigned(cPub.getModulus());
+                byte[] cExp = unsigned(cPub.getPublicExponent());
+                byte[] sMod = unsigned(sPub.getModulus());
+                byte[] sExp = unsigned(sPub.getPublicExponent());
+
+                // לוקחים 4 תווים אחרונים מה-PIN ומ-decode-ים מ-hex לbytes
+                String last4 = pin.substring(pin.length() - 4);
+                byte[] pinBytes = hexToBytes(last4);
+
                 MessageDigest sha = MessageDigest.getInstance("SHA-256");
-                sha.update(cMod); sha.update(sMod); sha.update(pinBytes);
-                sendMsg(40, buildSecret(sha.digest()));
+                sha.update(cMod); sha.update(cExp);
+                sha.update(sMod); sha.update(sExp);
+                sha.update(pinBytes);
+                byte[] secret = sha.digest();
+
+                // שלח secret: [8,2,16,200,1,194,2,34,10,32,SECRET_32_BYTES]
+                ByteArrayOutputStream msg = new ByteArrayOutputStream();
+                msg.write(new byte[]{8,2,16,(byte)200,1,(byte)194,2,34,10,32});
+                msg.write(secret);
+                sendMsg(msg.toByteArray());
                 readMsg();
                 sock.close();
                 if (cb != null) cb.onPaired(
@@ -103,42 +127,41 @@ public class TvPairing {
         });
     }
 
+    private byte[] hexToBytes(String hex) {
+        int len = hex.length();
+        byte[] out = new byte[len / 2];
+        for (int i = 0; i < len; i += 2)
+            out[i/2] = (byte) Integer.parseInt(hex.substring(i, i+2), 16);
+        return out;
+    }
     private byte[] unsigned(java.math.BigInteger n) {
-        byte[] b = n.toByteArray();
+        byte[] b = n.abs().toByteArray();
         if (b[0] == 0) { byte[] t = new byte[b.length-1]; System.arraycopy(b,1,t,0,t.length); return t; }
         return b;
     }
     private byte[] buildPairingRequest() throws IOException {
-        ByteArrayOutputStream b = new ByteArrayOutputStream();
-        writeStr(b,1,"YES Remote"); writeStr(b,2,"Android"); return b.toByteArray();
+        byte[] svc = "atvremote".getBytes("UTF-8");
+        byte[] cli = "YesRemote".getBytes("UTF-8");
+        ByteArrayOutputStream inner = new ByteArrayOutputStream();
+        inner.write(0x0A); inner.write(svc.length); inner.write(svc);
+        inner.write(0x12); inner.write(cli.length); inner.write(cli);
+        ByteArrayOutputStream outer = new ByteArrayOutputStream();
+        outer.write(new byte[]{8,2,16,(byte)200,1,82});
+        outer.write(inner.size());
+        outer.write(inner.toByteArray());
+        return outer.toByteArray();
     }
-    private byte[] buildOptions() throws IOException {
-        ByteArrayOutputStream b = new ByteArrayOutputStream(), e = new ByteArrayOutputStream();
-        writeVar(e,1,3); writeBytes(b,1,e.toByteArray()); writeVar(b,2,1); return b.toByteArray();
-    }
-    private byte[] buildConfiguration() throws IOException {
-        ByteArrayOutputStream b = new ByteArrayOutputStream(); writeVar(b,1,3); return b.toByteArray();
-    }
-    private byte[] buildSecret(byte[] s) throws IOException {
-        ByteArrayOutputStream b = new ByteArrayOutputStream(); writeBytes(b,1,s); return b.toByteArray();
-    }
-    private void writeVar(ByteArrayOutputStream b, int f, int v) { b.write(f<<3); b.write(v&0x7F); }
-    private void writeStr(ByteArrayOutputStream b, int f, String s) throws IOException { writeBytes(b,f,s.getBytes("UTF-8")); }
-    private void writeBytes(ByteArrayOutputStream b, int f, byte[] v) throws IOException {
-        b.write((f<<3)|2); writeRawVar(b,v.length); b.write(v);
-    }
-    private void writeRawVar(ByteArrayOutputStream b, int v) {
-        while((v&~0x7F)!=0){b.write((v&0x7F)|0x80);v>>>=7;}b.write(v);
-    }
-    private void sendMsg(int t, byte[] p) throws IOException {
-        ByteArrayOutputStream w = new ByteArrayOutputStream();
-        writeVar(w,1,t); writeBytes(w,2,p);
-        byte[] b = w.toByteArray();
-        out.write(0x00); out.write(b.length); out.write(b); out.flush();
+    private void sendMsg(byte[] msg) throws IOException {
+        out.write(msg.length);
+        out.write(msg);
+        out.flush();
+        Log.d(TAG, "Sent " + msg.length + " bytes");
     }
     private byte[] readMsg() throws IOException {
-        in.read(); int len = in.read();
-        byte[] b = new byte[len]; int r = 0;
-        while(r<len) r+=in.read(b,r,len-r); return b;
+        int len = in.read() & 0xFF;
+        byte[] buf = new byte[len]; int r = 0;
+        while (r < len) r += in.read(buf, r, len-r);
+        Log.d(TAG, "Recv " + len + " bytes");
+        return buf;
     }
 }
