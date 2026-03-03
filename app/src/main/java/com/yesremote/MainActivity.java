@@ -1,6 +1,7 @@
 package com.yesremote;
 
 import android.app.AlertDialog;
+import android.text.InputType;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.*;
@@ -95,7 +96,7 @@ public class MainActivity extends AppCompatActivity {
     private void showPinDialog() {
         EditText pin = new EditText(this);
         pin.setHint("קוד מהטלוויזיה");
-        pin.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        pin.setInputType(android.text.InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
         pin.setTextColor(0xFF000000);
         new AlertDialog.Builder(this).setTitle("קוד אישור")
             .setMessage("הכנס את הקוד מהטלוויזיה:").setView(pin)
