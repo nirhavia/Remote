@@ -11,6 +11,21 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     private TvClient client;
+    private RemoteService remoteService;
+    private boolean serviceBound = false;
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            RemoteService.LocalBinder lb = (RemoteService.LocalBinder) binder;
+            remoteService = lb.getService();
+            serviceBound = true;
+            // עדכן client reference
+            client = remoteService.getClient();
+        }
+        public void onServiceDisconnected(ComponentName name) {
+            serviceBound = false;
+        }
+    };
+
     private TvDiscovery discovery;
     private TvPairing pairing;
     private TextView tvStatus;
@@ -33,7 +48,15 @@ public class MainActivity extends AppCompatActivity {
         });
         startDiscovery();
         if (!saved.isEmpty() && client.isPaired(saved)) {
-            setStatus("מתחבר...",0xFF8892A4); client.connect(saved);
+            setStatus("מתחבר...",0xFF8892A4); // הפעל service עם IP חדש
+                Intent si = new Intent(this, RemoteService.class);
+                si.putExtra("ip", saved);
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    startForegroundService(si);
+                } else {
+                    startService(si);
+                }
+                if (remoteService != null) client = remoteService.getClient();
         }
         setupButtons();
     }
@@ -124,4 +147,11 @@ public class MainActivity extends AppCompatActivity {
     }
     private void bind(int id,int kc){View v=findViewById(id);if(v!=null)v.setOnClickListener(x->client.sendKey(kc));}
     @Override protected void onDestroy(){super.onDestroy();client.disconnect();if(discovery!=null)discovery.stop();}
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (serviceBound) unbindService(serviceConnection);
+    }
+
 }
