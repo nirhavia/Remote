@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.pm.ServiceInfo;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.Build;
@@ -37,7 +38,12 @@ public class RemoteService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(NOTIF_ID, buildNotification("מחפש TV..."));
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(NOTIF_ID, buildNotification("מחפש TV..."),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
+        } else {
+            startForeground(NOTIF_ID, buildNotification("מחפש TV..."));
+        }
         if (intent != null) {
             // טיפול בלחיצת כפתור מ-widget/discovery
             if (ACTION.equals(intent.getAction())) {
