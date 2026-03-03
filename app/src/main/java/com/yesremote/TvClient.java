@@ -68,69 +68,61 @@ public class TvClient {
                 socket.startHandshake();
                 out = socket.getOutputStream();
                 inp = socket.getInputStream();
-                Log.d(TAG, "TLS connected port 6466");
+                Log.d(TAG, "TLS connected");
 
-                // 1. קרא הודעת info מהשרת
+                // קרא info מהשרת
                 byte[] serverInfo = readMsg();
-                Log.d(TAG, "Server info received: " + serverInfo.length + " bytes");
+                Log.d(TAG, "Server info: " + bytesToHex(serverInfo));
 
-                // 2. שלח Config 1
+                // שלח Config 1
                 byte[] cfg1 = new byte[]{10,34,8,(byte)238,4,18,29,24,1,34,1,49,42,15,
                     97,110,100,114,111,105,116,118,45,114,101,109,111,116,101,50,5,49,46,48,46,48};
                 writeMsg(cfg1);
-                Log.d(TAG, "Sent config1");
 
-                // 3. קרא תגובות לconfig1 עד שמגיע [18, 0]
-                socket.setSoTimeout(3000);
-                try {
-                    for (int i = 0; i < 5; i++) {
-                        byte[] r = readMsg();
-                        Log.d(TAG, "Config1 resp: " + bytesToHex(r));
-                        // [18, 0] = signal to send config2
-                        if (r.length == 2 && r[0] == 18 && r[1] == 0) break;
-                    }
-                } catch (java.net.SocketTimeoutException ignored) {
-                    Log.d(TAG, "Config1 timeout - continuing");
-                }
-                socket.setSoTimeout(0);
-
-                // 4. שלח Config 2
-                writeMsg(new byte[]{18, 3, 8, (byte)238, 4});
-                Log.d(TAG, "Sent config2");
-
-                // 5. קרא הודעות status מהשרת (עם timeout)
+                // קרא תגובות config1 עם timeout
                 socket.setSoTimeout(2000);
                 try {
                     for (int i = 0; i < 5; i++) {
                         byte[] r = readMsg();
-                        Log.d(TAG, "Config2 resp: " + bytesToHex(r));
+                        Log.d(TAG, "cfg1 resp: " + bytesToHex(r));
                     }
-                } catch (java.net.SocketTimeoutException ignored) {
-                    Log.d(TAG, "Config2 timeout - ready!");
-                }
+                } catch (java.net.SocketTimeoutException ignored) {}
                 socket.setSoTimeout(0);
 
-                // מוכן!
+                // שלח Config 2
+                writeMsg(new byte[]{18, 3, 8, (byte)238, 4});
+
+                // קרא תגובות config2 עם timeout
+                socket.setSoTimeout(2000);
+                try {
+                    for (int i = 0; i < 5; i++) {
+                        byte[] r = readMsg();
+                        Log.d(TAG, "cfg2 resp: " + bytesToHex(r));
+                    }
+                } catch (java.net.SocketTimeoutException ignored) {}
+                socket.setSoTimeout(0);
+
                 connected = true;
                 if (listener != null) listener.onConnected();
-                Log.d(TAG, "✅ Ready to send commands!");
+                Log.d(TAG, "✅ Ready!");
 
-                // לולאת ping/pong
+                // לולאת ping/pong - כל ההודעות כאן עם length prefix
                 while (!socket.isClosed()) {
                     byte[] msg = readMsg();
                     if (msg == null) break;
+                    Log.d(TAG, "Recv: " + bytesToHex(msg));
+                    // Ping: field 8, type LEN => tag=0x42=66
                     if (msg.length >= 1 && (msg[0] & 0xFF) == 66) {
-                        // Pong - ללא length prefix
-                        Log.d(TAG, "Ping! Sending pong");
+                        // Pong: field 9, type LEN => tag=0x4A=74, len=2, [8, 25]
+                        // חייב להשתמש ב-writeMsg כמו כל שאר ההודעות!
                         synchronized (out) {
-                            out.write(new byte[]{74, 2, 8, 25});
-                            out.flush();
+                            writeMsg(new byte[]{0x4A, 0x02, 0x08, 0x19});
                         }
+                        Log.d(TAG, "Pong sent");
                     }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "connect error", e);
-                connected = false;
                 if (listener != null) listener.onError(e.getMessage());
             } finally {
                 connected = false;
@@ -141,34 +133,28 @@ public class TvClient {
 
     public void sendKey(int kc) {
         if (!connected || out == null) {
-            Log.w(TAG, "sendKey: not connected, kc=" + kc);
+            Log.w(TAG, "sendKey: not connected kc=" + kc);
             return;
         }
         exec.execute(() -> {
             try {
                 synchronized (out) {
-                    // protobuf RemoteKeyInject: field10=LEN, inner=(field1=keycode, field2=direction)
-                    byte[] press   = buildKeyMsg(kc, 1); // SHORT press
-                    byte[] release = buildKeyMsg(kc, 2); // release
-                    writeMsg(press);
-                    Log.d(TAG, "Key press sent: " + kc + " -> " + bytesToHex(press));
-                    Thread.sleep(100);
-                    writeMsg(release);
-                    Log.d(TAG, "Key release sent: " + kc);
+                    writeMsg(buildKeyMsg(kc, 1));
+                    Thread.sleep(80);
+                    writeMsg(buildKeyMsg(kc, 2));
+                    Log.d(TAG, "Key sent: " + kc);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "sendKey error kc=" + kc, e);
-                connected = false;
-                if (listener != null) listener.onDisconnected();
+                // לא מנתקים - ייתכן שזו שגיאה זמנית
             }
         });
     }
 
-    // בניית הודעת protobuf נכונה עם varint encoding
     private byte[] buildKeyMsg(int keycode, int direction) throws IOException {
         ByteArrayOutputStream inner = new ByteArrayOutputStream();
-        inner.write(0x08); writeVarint(inner, keycode);    // field 1 = key_code
-        inner.write(0x10); writeVarint(inner, direction);  // field 2 = direction
+        inner.write(0x08); writeVarint(inner, keycode);
+        inner.write(0x10); writeVarint(inner, direction);
         ByteArrayOutputStream outer = new ByteArrayOutputStream();
         outer.write(0x52); // field 10, type LEN
         writeVarint(outer, inner.size());
@@ -184,6 +170,7 @@ public class TvClient {
         b.write(v);
     }
 
+    // כל הודעה: byte אחד של אורך, אחריו הdata
     private void writeMsg(byte[] payload) throws IOException {
         out.write(payload.length);
         out.write(payload);
@@ -193,11 +180,10 @@ public class TvClient {
     private byte[] readMsg() throws IOException {
         int len = inp.read();
         if (len < 0) return null;
-        len &= 0xFF;
-        byte[] buf = new byte[len];
+        byte[] buf = new byte[len & 0xFF];
         int r = 0;
-        while (r < len) {
-            int n = inp.read(buf, r, len - r);
+        while (r < buf.length) {
+            int n = inp.read(buf, r, buf.length - r);
             if (n < 0) return null;
             r += n;
         }
