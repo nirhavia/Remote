@@ -12,6 +12,9 @@ import android.os.IBinder;
 import android.util.Log;
 
 public class RemoteService extends Service {
+    public static final String ACTION = "com.yesremote.ACTION_SEND_KEY";
+    public static final String EXTRA  = "keycode";
+
     private static final String TAG = "RemoteService";
     private static final String CHANNEL_ID = "yes_remote_channel";
     private static final int NOTIF_ID = 1;
@@ -36,6 +39,13 @@ public class RemoteService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(NOTIF_ID, buildNotification("מחפש TV..."));
         if (intent != null) {
+            // טיפול בלחיצת כפתור מ-widget/discovery
+            if (ACTION.equals(intent.getAction())) {
+                int kc = intent.getIntExtra(EXTRA, -1);
+                if (kc >= 0 && client != null) client.sendKey(kc);
+                return START_STICKY;
+            }
+
             String ip = intent.getStringExtra("ip");
             if (ip != null && !ip.equals(currentIp)) {
                 currentIp = ip;
