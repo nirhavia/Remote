@@ -153,10 +153,5 @@ public class MainActivity extends AppCompatActivity {
     private void bind(int id,int kc){View v=findViewById(id);if(v!=null)v.setOnClickListener(x->client.sendKey(kc));}
     @Override protected void onDestroy(){super.onDestroy();client.disconnect();if(discovery!=null)discovery.stop();}
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (serviceBound) unbindService(serviceConnection);
-    }
 
 }
