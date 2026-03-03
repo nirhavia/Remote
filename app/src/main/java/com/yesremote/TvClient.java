@@ -70,31 +70,45 @@ public class TvClient {
                 inp = socket.getInputStream();
                 Log.d(TAG, "TLS connected port 6466");
 
-                // 1. קרא הודעת init מהשרת
+                // 1. קרא הודעת info מהשרת
                 byte[] serverInfo = readMsg();
-                Log.d(TAG, "Server info: " + bytesToHex(serverInfo));
+                Log.d(TAG, "Server info received: " + serverInfo.length + " bytes");
 
                 // 2. שלח Config 1
                 byte[] cfg1 = new byte[]{10,34,8,(byte)238,4,18,29,24,1,34,1,49,42,15,
                     97,110,100,114,111,105,116,118,45,114,101,109,111,116,101,50,5,49,46,48,46,48};
-                sendRaw(cfg1);
+                writeMsg(cfg1);
                 Log.d(TAG, "Sent config1");
 
-                // 3. קרא 2 תגובות לconfig1
-                byte[] r1 = readMsg();
-                Log.d(TAG, "Config1 ack1: " + bytesToHex(r1));
-                byte[] r2 = readMsg();
-                Log.d(TAG, "Config1 ack2: " + bytesToHex(r2));
+                // 3. קרא תגובות לconfig1 עד שמגיע [18, 0]
+                socket.setSoTimeout(3000);
+                try {
+                    for (int i = 0; i < 5; i++) {
+                        byte[] r = readMsg();
+                        Log.d(TAG, "Config1 resp: " + bytesToHex(r));
+                        // [18, 0] = signal to send config2
+                        if (r.length == 2 && r[0] == 18 && r[1] == 0) break;
+                    }
+                } catch (java.net.SocketTimeoutException ignored) {
+                    Log.d(TAG, "Config1 timeout - continuing");
+                }
+                socket.setSoTimeout(0);
 
                 // 4. שלח Config 2
-                sendRaw(new byte[]{18,3,8,(byte)238,4});
+                writeMsg(new byte[]{18, 3, 8, (byte)238, 4});
                 Log.d(TAG, "Sent config2");
 
-                // 5. קרא 3 תגובות לconfig2 (power/app/volume)
-                for (int i = 0; i < 3; i++) {
-                    byte[] ri = readMsg();
-                    Log.d(TAG, "Config2 ack" + i + ": " + bytesToHex(ri));
+                // 5. קרא הודעות status מהשרת (עם timeout)
+                socket.setSoTimeout(2000);
+                try {
+                    for (int i = 0; i < 5; i++) {
+                        byte[] r = readMsg();
+                        Log.d(TAG, "Config2 resp: " + bytesToHex(r));
+                    }
+                } catch (java.net.SocketTimeoutException ignored) {
+                    Log.d(TAG, "Config2 timeout - ready!");
                 }
+                socket.setSoTimeout(0);
 
                 // מוכן!
                 connected = true;
@@ -105,9 +119,9 @@ public class TvClient {
                 while (!socket.isClosed()) {
                     byte[] msg = readMsg();
                     if (msg == null) break;
-                    // Ping מתחיל ב-[66, 6, ...]
-                    if (msg.length >= 2 && (msg[0] & 0xFF) == 66) {
-                        Log.d(TAG, "Ping! sending pong");
+                    if (msg.length >= 1 && (msg[0] & 0xFF) == 66) {
+                        // Pong - ללא length prefix
+                        Log.d(TAG, "Ping! Sending pong");
                         synchronized (out) {
                             out.write(new byte[]{74, 2, 8, 25});
                             out.flush();
@@ -127,30 +141,50 @@ public class TvClient {
 
     public void sendKey(int kc) {
         if (!connected || out == null) {
-            Log.w(TAG, "sendKey: not connected");
+            Log.w(TAG, "sendKey: not connected, kc=" + kc);
             return;
         }
         exec.execute(() -> {
             try {
                 synchronized (out) {
-                    // Press
-                    byte key = (byte)(kc & 0xFF);
-                    byte[] press   = {82, 4, 8, key, 16, 1};
-                    byte[] release = {82, 4, 8, key, 16, 2};
-                    sendRaw(press);
+                    // protobuf RemoteKeyInject: field10=LEN, inner=(field1=keycode, field2=direction)
+                    byte[] press   = buildKeyMsg(kc, 1); // SHORT press
+                    byte[] release = buildKeyMsg(kc, 2); // release
+                    writeMsg(press);
+                    Log.d(TAG, "Key press sent: " + kc + " -> " + bytesToHex(press));
                     Thread.sleep(100);
-                    sendRaw(release);
-                    Log.d(TAG, "Sent key: " + kc);
+                    writeMsg(release);
+                    Log.d(TAG, "Key release sent: " + kc);
                 }
             } catch (Exception e) {
-                Log.e(TAG, "sendKey error", e);
+                Log.e(TAG, "sendKey error kc=" + kc, e);
                 connected = false;
                 if (listener != null) listener.onDisconnected();
             }
         });
     }
 
-    private void sendRaw(byte[] payload) throws IOException {
+    // בניית הודעת protobuf נכונה עם varint encoding
+    private byte[] buildKeyMsg(int keycode, int direction) throws IOException {
+        ByteArrayOutputStream inner = new ByteArrayOutputStream();
+        inner.write(0x08); writeVarint(inner, keycode);    // field 1 = key_code
+        inner.write(0x10); writeVarint(inner, direction);  // field 2 = direction
+        ByteArrayOutputStream outer = new ByteArrayOutputStream();
+        outer.write(0x52); // field 10, type LEN
+        writeVarint(outer, inner.size());
+        outer.write(inner.toByteArray());
+        return outer.toByteArray();
+    }
+
+    private void writeVarint(ByteArrayOutputStream b, int v) {
+        while ((v & ~0x7F) != 0) {
+            b.write((v & 0x7F) | 0x80);
+            v >>>= 7;
+        }
+        b.write(v);
+    }
+
+    private void writeMsg(byte[] payload) throws IOException {
         out.write(payload.length);
         out.write(payload);
         out.flush();
@@ -182,10 +216,7 @@ public class TvClient {
             android.content.SharedPreferences p = ctx.getSharedPreferences(PREFS, 0);
             String keyB64  = p.getString("key_"  + ip, null);
             String certB64 = p.getString("cert_" + ip, null);
-            if (keyB64 == null || certB64 == null) {
-                Log.w(TAG, "No cert found for " + ip);
-                return null;
-            }
+            if (keyB64 == null || certB64 == null) { Log.w(TAG, "No cert for " + ip); return null; }
             PrivateKey pk = KeyFactory.getInstance("RSA")
                 .generatePrivate(new PKCS8EncodedKeySpec(Base64.decode(keyB64, Base64.DEFAULT)));
             X509Certificate cert = (X509Certificate) CertificateFactory.getInstance("X.509")
@@ -196,40 +227,25 @@ public class TvClient {
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             kmf.init(ks, new char[0]);
             return kmf.getKeyManagers();
-        } catch (Exception e) {
-            Log.e(TAG, "loadCert error", e);
-            return null;
-        }
+        } catch (Exception e) { Log.e(TAG, "loadCert", e); return null; }
     }
 
     public void savePairing(String ip, byte[] keyBytes, byte[] certBytes) {
         ctx.getSharedPreferences(PREFS, 0).edit()
             .putString("key_"  + ip, Base64.encodeToString(keyBytes,  Base64.DEFAULT))
             .putString("cert_" + ip, Base64.encodeToString(certBytes, Base64.DEFAULT))
-            .putBoolean("paired_" + ip, true)
-            .apply();
-        Log.d(TAG, "Pairing saved for " + ip);
+            .putBoolean("paired_" + ip, true).apply();
     }
-
     public void clearPairing(String ip) {
         disconnect();
         ctx.getSharedPreferences(PREFS, 0).edit()
-            .remove("key_" + ip).remove("cert_" + ip).remove("paired_" + ip)
-            .apply();
+            .remove("key_"+ip).remove("cert_"+ip).remove("paired_"+ip).apply();
     }
-
     public boolean isPaired(String ip) {
-        return ctx.getSharedPreferences(PREFS, 0).getBoolean("paired_" + ip, false);
+        return ctx.getSharedPreferences(PREFS, 0).getBoolean("paired_"+ip, false);
     }
-
-    public void saveIp(String ip) {
-        ctx.getSharedPreferences(PREFS, 0).edit().putString("ip", ip).apply();
-    }
-
-    public String getSavedIp() {
-        return ctx.getSharedPreferences(PREFS, 0).getString("ip", "");
-    }
-
+    public void saveIp(String ip) { ctx.getSharedPreferences(PREFS,0).edit().putString("ip",ip).apply(); }
+    public String getSavedIp()   { return ctx.getSharedPreferences(PREFS,0).getString("ip",""); }
     public void disconnect() {
         connected = false;
         try { if (socket != null) socket.close(); } catch (Exception ignored) {}
