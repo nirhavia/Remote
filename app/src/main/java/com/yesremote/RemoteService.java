@@ -48,7 +48,7 @@ public class RemoteService extends Service {
             // טיפול בלחיצת כפתור מ-widget/discovery
             if (ACTION.equals(intent.getAction())) {
                 int kc = intent.getIntExtra(EXTRA, -1);
-                if (kc >= 0 && client != null) client.sendKey(kc);
+                if (kc >= 0 && client != null && client.isConnected()) client.sendKey(kc);
                 return START_STICKY;
             }
 
