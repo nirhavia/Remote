@@ -1,4 +1,8 @@
 package com.yesremote;
+import android.os.IBinder;
+import android.content.ServiceConnection;
+import android.content.ComponentName;
+import android.content.Intent;
 
 import android.app.AlertDialog;
 import android.text.InputType;
