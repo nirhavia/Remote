@@ -33,6 +33,8 @@ public class TvClient {
         KEY_MUTE=164, KEY_CH_UP=166, KEY_CH_DOWN=167,
         KEY_LAST_CHANNEL=229;
 
+    public static int digit(int d) { return KEY_0 + d; }
+
     private final Context ctx;
     private final ExecutorService exec = Executors.newCachedThreadPool();
     private Listener listener;
