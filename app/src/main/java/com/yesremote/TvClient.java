@@ -31,7 +31,10 @@ public class TvClient {
         KEY_OK=23, KEY_BACK=4, KEY_HOME=3, KEY_MENU=82,
         KEY_POWER=26, KEY_VOL_UP=24, KEY_VOL_DOWN=25,
         KEY_MUTE=164, KEY_CH_UP=166, KEY_CH_DOWN=167,
-        KEY_LAST_CHANNEL=229;
+        // KEYCODE_LAST_CHANNEL = 229, אבל YES משתמשת ב-KEYCODE_TV_INPUT = 178
+        // נשלח שניהם ונראה מה עובד
+        KEY_LAST_CHANNEL=229,
+        KEY_TV_INPUT=178;
 
     public static int digit(int d) { return KEY_0 + d; }
 
@@ -39,8 +42,8 @@ public class TvClient {
     private final ExecutorService exec = Executors.newCachedThreadPool();
     private Listener listener;
     private SSLSocket socket;
-    private OutputStream out;
-    private InputStream inp;
+    private volatile OutputStream out;
+    private volatile InputStream inp;
     private volatile boolean connected = false;
 
     public TvClient(Context ctx) { this.ctx = ctx; }
@@ -52,7 +55,7 @@ public class TvClient {
             try {
                 KeyManager[] km = loadCert(ip);
                 if (km == null) {
-                    if (listener != null) listener.onError("אין certificate - יש לבצע pairing");
+                    if (listener != null) listener.onError("אין certificate");
                     return;
                 }
                 SSLContext ssl = SSLContext.getInstance("TLS");
@@ -65,64 +68,56 @@ public class TvClient {
                 socket.setEnabledProtocols(socket.getSupportedProtocols());
                 socket.setEnabledCipherSuites(socket.getSupportedCipherSuites());
                 socket.connect(new InetSocketAddress(ip, PORT), 8000);
+                socket.setKeepAlive(true);  // ← מונע ניתוק idle
                 socket.startHandshake();
                 out = socket.getOutputStream();
                 inp = socket.getInputStream();
                 Log.d(TAG, "TLS connected");
 
-                // קרא info מהשרת
+                // handshake
                 byte[] serverInfo = readMsg();
-                Log.d(TAG, "Server info: " + bytesToHex(serverInfo));
+                Log.d(TAG, "Server info: " + serverInfo.length + " bytes");
 
-                // שלח Config 1
-                byte[] cfg1 = new byte[]{10,34,8,(byte)238,4,18,29,24,1,34,1,49,42,15,
+                byte[] cfg1 = {10,34,8,(byte)238,4,18,29,24,1,34,1,49,42,15,
                     97,110,100,114,111,105,116,118,45,114,101,109,111,116,101,50,5,49,46,48,46,48};
                 writeMsg(cfg1);
 
-                // קרא תגובות config1 עם timeout
                 socket.setSoTimeout(2000);
-                try {
-                    for (int i = 0; i < 5; i++) {
-                        byte[] r = readMsg();
-                        Log.d(TAG, "cfg1 resp: " + bytesToHex(r));
-                    }
-                } catch (java.net.SocketTimeoutException ignored) {}
+                try { for(int i=0;i<5;i++) { byte[] r=readMsg(); Log.d(TAG,"cfg1:"+bytesToHex(r)); } }
+                catch(java.net.SocketTimeoutException ignored){}
                 socket.setSoTimeout(0);
 
-                // שלח Config 2
-                writeMsg(new byte[]{18, 3, 8, (byte)238, 4});
+                writeMsg(new byte[]{18,3,8,(byte)238,4});
 
-                // קרא תגובות config2 עם timeout
                 socket.setSoTimeout(2000);
-                try {
-                    for (int i = 0; i < 5; i++) {
-                        byte[] r = readMsg();
-                        Log.d(TAG, "cfg2 resp: " + bytesToHex(r));
-                    }
-                } catch (java.net.SocketTimeoutException ignored) {}
+                try { for(int i=0;i<5;i++) { byte[] r=readMsg(); Log.d(TAG,"cfg2:"+bytesToHex(r)); } }
+                catch(java.net.SocketTimeoutException ignored){}
                 socket.setSoTimeout(0);
 
                 connected = true;
                 if (listener != null) listener.onConnected();
                 Log.d(TAG, "✅ Ready!");
 
-                // לולאת ping/pong - כל ההודעות כאן עם length prefix
+                // לולאת ping/pong - thread עצמאי, לא מחכה ל-sendKey
                 while (!socket.isClosed()) {
                     byte[] msg = readMsg();
                     if (msg == null) break;
-                    Log.d(TAG, "Recv: " + bytesToHex(msg));
-                    // Ping: field 8, type LEN => tag=0x42=66
-                    if (msg.length >= 1 && (msg[0] & 0xFF) == 66) {
-                        // Pong: field 9, type LEN => tag=0x4A=74, len=2, [8, 25]
-                        // חייב להשתמש ב-writeMsg כמו כל שאר ההודעות!
-                        synchronized (out) {
-                            writeMsg(new byte[]{0x4A, 0x02, 0x08, 0x19});
+                    // Ping tag = 0x42 (field8, LEN)
+                    if (msg.length >= 1 && (msg[0] & 0xFF) == 0x42) {
+                        Log.d(TAG, "Ping! sending pong");
+                        // Pong שנשלח ישירות על ה-stream - לא דרך synchronized
+                        // כי ping/pong חייב להיות מהיר
+                        OutputStream o = out;
+                        if (o != null) {
+                            byte[] pong = {0x4A,0x02,0x08,0x19};
+                            o.write(pong.length);
+                            o.write(pong);
+                            o.flush();
                         }
-                        Log.d(TAG, "Pong sent");
                     }
                 }
             } catch (Exception e) {
-                Log.e(TAG, "connect error", e);
+                Log.e(TAG, "connect error: " + e.getMessage());
                 if (listener != null) listener.onError(e.getMessage());
             } finally {
                 connected = false;
@@ -132,21 +127,20 @@ public class TvClient {
     }
 
     public void sendKey(int kc) {
-        if (!connected || out == null) {
-            Log.w(TAG, "sendKey: not connected kc=" + kc);
-            return;
-        }
+        if (!connected || out == null) { Log.w(TAG,"not connected kc="+kc); return; }
         exec.execute(() -> {
             try {
-                synchronized (out) {
-                    writeMsg(buildKeyMsg(kc, 1));
-                    Thread.sleep(80);
-                    writeMsg(buildKeyMsg(kc, 2));
-                    Log.d(TAG, "Key sent: " + kc);
-                }
+                // שלח press ואז release בלי synchronized ממושך
+                byte[] press   = buildKeyMsg(kc, 1);
+                byte[] release = buildKeyMsg(kc, 2);
+                OutputStream o = out;
+                if (o == null) return;
+                o.write(press.length);   o.write(press);   o.flush();
+                Thread.sleep(80);
+                o.write(release.length); o.write(release); o.flush();
+                Log.d(TAG, "Key sent: " + kc);
             } catch (Exception e) {
-                Log.e(TAG, "sendKey error kc=" + kc, e);
-                // לא מנתקים - ייתכן שזו שגיאה זמנית
+                Log.e(TAG, "sendKey error kc="+kc+": "+e.getMessage());
             }
         });
     }
@@ -156,25 +150,19 @@ public class TvClient {
         inner.write(0x08); writeVarint(inner, keycode);
         inner.write(0x10); writeVarint(inner, direction);
         ByteArrayOutputStream outer = new ByteArrayOutputStream();
-        outer.write(0x52); // field 10, type LEN
+        outer.write(0x52);
         writeVarint(outer, inner.size());
         outer.write(inner.toByteArray());
         return outer.toByteArray();
     }
 
     private void writeVarint(ByteArrayOutputStream b, int v) {
-        while ((v & ~0x7F) != 0) {
-            b.write((v & 0x7F) | 0x80);
-            v >>>= 7;
-        }
+        while ((v & ~0x7F) != 0) { b.write((v & 0x7F) | 0x80); v >>>= 7; }
         b.write(v);
     }
 
-    // כל הודעה: byte אחד של אורך, אחריו הdata
     private void writeMsg(byte[] payload) throws IOException {
-        out.write(payload.length);
-        out.write(payload);
-        out.flush();
+        out.write(payload.length); out.write(payload); out.flush();
     }
 
     private byte[] readMsg() throws IOException {
@@ -193,47 +181,47 @@ public class TvClient {
     private String bytesToHex(byte[] b) {
         if (b == null) return "null";
         StringBuilder sb = new StringBuilder();
-        for (byte v : b) sb.append(String.format("%02X ", v & 0xFF));
+        for (byte v : b) sb.append(String.format("%02X ", v&0xFF));
         return sb.toString().trim();
     }
 
     private KeyManager[] loadCert(String ip) {
         try {
-            android.content.SharedPreferences p = ctx.getSharedPreferences(PREFS, 0);
-            String keyB64  = p.getString("key_"  + ip, null);
-            String certB64 = p.getString("cert_" + ip, null);
-            if (keyB64 == null || certB64 == null) { Log.w(TAG, "No cert for " + ip); return null; }
+            android.content.SharedPreferences p = ctx.getSharedPreferences(PREFS,0);
+            String keyB64  = p.getString("key_"+ip, null);
+            String certB64 = p.getString("cert_"+ip, null);
+            if (keyB64==null||certB64==null) { Log.w(TAG,"No cert for "+ip); return null; }
             PrivateKey pk = KeyFactory.getInstance("RSA")
-                .generatePrivate(new PKCS8EncodedKeySpec(Base64.decode(keyB64, Base64.DEFAULT)));
-            X509Certificate cert = (X509Certificate) CertificateFactory.getInstance("X.509")
-                .generateCertificate(new ByteArrayInputStream(Base64.decode(certB64, Base64.DEFAULT)));
+                .generatePrivate(new PKCS8EncodedKeySpec(Base64.decode(keyB64,Base64.DEFAULT)));
+            X509Certificate cert = (X509Certificate)CertificateFactory.getInstance("X.509")
+                .generateCertificate(new ByteArrayInputStream(Base64.decode(certB64,Base64.DEFAULT)));
             KeyStore ks = KeyStore.getInstance("PKCS12");
-            ks.load(null, null);
-            ks.setKeyEntry("k", pk, new char[0], new X509Certificate[]{cert});
+            ks.load(null,null);
+            ks.setKeyEntry("k",pk,new char[0],new X509Certificate[]{cert});
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, new char[0]);
+            kmf.init(ks,new char[0]);
             return kmf.getKeyManagers();
-        } catch (Exception e) { Log.e(TAG, "loadCert", e); return null; }
+        } catch(Exception e){Log.e(TAG,"loadCert",e);return null;}
     }
 
-    public void savePairing(String ip, byte[] keyBytes, byte[] certBytes) {
-        ctx.getSharedPreferences(PREFS, 0).edit()
-            .putString("key_"  + ip, Base64.encodeToString(keyBytes,  Base64.DEFAULT))
-            .putString("cert_" + ip, Base64.encodeToString(certBytes, Base64.DEFAULT))
-            .putBoolean("paired_" + ip, true).apply();
+    public void savePairing(String ip,byte[] keyBytes,byte[] certBytes) {
+        ctx.getSharedPreferences(PREFS,0).edit()
+            .putString("key_"+ip, Base64.encodeToString(keyBytes, Base64.DEFAULT))
+            .putString("cert_"+ip,Base64.encodeToString(certBytes,Base64.DEFAULT))
+            .putBoolean("paired_"+ip,true).apply();
     }
     public void clearPairing(String ip) {
         disconnect();
-        ctx.getSharedPreferences(PREFS, 0).edit()
+        ctx.getSharedPreferences(PREFS,0).edit()
             .remove("key_"+ip).remove("cert_"+ip).remove("paired_"+ip).apply();
     }
     public boolean isPaired(String ip) {
-        return ctx.getSharedPreferences(PREFS, 0).getBoolean("paired_"+ip, false);
+        return ctx.getSharedPreferences(PREFS,0).getBoolean("paired_"+ip,false);
     }
-    public void saveIp(String ip) { ctx.getSharedPreferences(PREFS,0).edit().putString("ip",ip).apply(); }
-    public String getSavedIp()   { return ctx.getSharedPreferences(PREFS,0).getString("ip",""); }
-    public void disconnect() {
-        connected = false;
-        try { if (socket != null) socket.close(); } catch (Exception ignored) {}
+    public void saveIp(String ip){ctx.getSharedPreferences(PREFS,0).edit().putString("ip",ip).apply();}
+    public String getSavedIp(){return ctx.getSharedPreferences(PREFS,0).getString("ip","");}
+    public void disconnect(){
+        connected=false;
+        try{if(socket!=null)socket.close();}catch(Exception ignored){}
     }
 }
