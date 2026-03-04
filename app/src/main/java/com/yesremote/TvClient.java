@@ -117,8 +117,11 @@ public class TvClient {
                     Log.d(TAG, "Recv: " + hex(msg));
                     // Ping = field 8, type LEN = tag 0x42
                     if (msg.length > 0 && (msg[0] & 0xFF) == 0x42) {
-                        // שלח pong מיד, באותו thread, לפני כל דבר אחר
-                        pong();
+                        // Pong = Ping עם byte[0]: 0x42->0x4A (field8->field9)
+                        // חייב לשקף בחזרה את אותו val שהשרת שלח!
+                        byte[] pongMsg = msg.clone();
+                        pongMsg[0] = 0x4A;
+                        pong(pongMsg);
                     }
                 }
 
@@ -162,16 +165,15 @@ public class TvClient {
     // ─────────────────────────────────────────────
     // pong - נשלח ישירות מthread הקריאה, SYNCHRONIZED
     // ─────────────────────────────────────────────
-    private void pong() {
+    private void pong(byte[] pongMsg) {
         try {
-            byte[] p = {0x4A,0x02,0x08,0x19};
             synchronized (outLock) {
                 if (out == null) return;
-                out.write(p.length);
-                out.write(p);
+                out.write(pongMsg.length);
+                out.write(pongMsg);
                 out.flush();
             }
-            Log.d(TAG, "pong sent");
+            Log.d(TAG, "pong sent: " + hex(pongMsg));
         } catch (Exception e) {
             Log.e(TAG, "pong err: " + e);
         }
