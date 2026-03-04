@@ -25,5 +25,12 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info"/>
         </receiver>
         <service android:name=".RemoteService" android:exported="false"/>
+            <receiver
+            android:name=".KeyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.yesremote.ACTION_KEY" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
