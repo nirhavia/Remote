@@ -5,6 +5,8 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.net.wifi.WifiManager;
+import android.os.PowerManager;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
@@ -24,6 +26,8 @@ public class RemoteService extends Service {
     public static final String EXTRA  = "keycode";
 
     private TvClient client;
+    private WifiManager.WifiLock wifiLock;
+    private PowerManager.WakeLock wakeLock;
     private String currentIp = "";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final IBinder binder = new LocalBinder();
@@ -37,6 +41,13 @@ public class RemoteService extends Service {
         super.onCreate();
         client = new TvClient(this);
         createNotificationChannel();
+        // מנע כיבוי WiFi ו-CPU ברקע
+        WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+        wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "YesRemoteWifi");
+        wifiLock.acquire();
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "YesRemote:WakeLock");
+        wakeLock.acquire();
         Log.d(TAG, "Service created");
     }
 
@@ -167,5 +178,7 @@ public class RemoteService extends Service {
         super.onDestroy();
         handler.removeCallbacksAndMessages(null);
         if (client != null) client.disconnect();
+        if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
+        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
     }
 }
