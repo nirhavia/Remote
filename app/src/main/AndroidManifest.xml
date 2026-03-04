@@ -24,7 +24,8 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info"/>
         </receiver>
-        <service android:name=".RemoteService" android:exported="false"/>
+        <service android:name=".RemoteService"
+            android:foregroundServiceType="connectedDevice" android:exported="false"/>
             <receiver
             android:name=".KeyReceiver"
             android:exported="false">

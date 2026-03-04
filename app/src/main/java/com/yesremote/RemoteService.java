@@ -36,29 +36,40 @@ public class RemoteService extends Service {
         Log.d(TAG, "Service created");
     }
 
-    @Override
+        @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, buildNotification("מחפש TV..."),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
-        } else {
-            startForeground(NOTIF_ID, buildNotification("מחפש TV..."));
-        }
-        if (intent != null) {
-            // טיפול בלחיצת כפתור מ-widget/discovery
-            if (ACTION.equals(intent.getAction())) {
-                int kc = intent.getIntExtra(EXTRA, -1);
-                if (kc >= 0 && client != null && client.isConnected()) client.sendKey(kc);
-                return START_STICKY;
+        // ======================================================
+        // ACTION_SEND_KEY מגיע מווידג'ט - אל תקרא startForeground!
+        // רק בצע את הפקודה ותחזור.
+        // ======================================================
+        if (intent != null && ACTION.equals(intent.getAction())) {
+            int kc = intent.getIntExtra(EXTRA, -1);
+            if (kc >= 0 && client != null && client.isConnected()) {
+                client.sendKey(kc);
             }
+            return START_STICKY;
+        }
 
+        // הפעלה ראשונה מ-MainActivity - כאן מותר startForeground
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                startForeground(NOTIF_ID, buildNotification("מחפש TV..."),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
+            } else {
+                startForeground(NOTIF_ID, buildNotification("מחפש TV..."));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "startForeground failed", e);
+        }
+
+        if (intent != null) {
             String ip = intent.getStringExtra("ip");
             if (ip != null && !ip.equals(currentIp)) {
                 currentIp = ip;
                 connectToTv(ip);
             }
         }
-        return START_STICKY; // מאתחל לבד אם נהרג
+        return START_STICKY;
     }
 
     private void connectToTv(String ip) {
