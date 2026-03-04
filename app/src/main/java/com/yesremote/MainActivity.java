@@ -145,6 +145,7 @@ public class MainActivity extends AppCompatActivity {
         bind(R.id.btnVolUp,TvClient.KEY_VOL_UP);bind(R.id.btnVolDown,TvClient.KEY_VOL_DOWN);
         bind(R.id.btnMute,TvClient.KEY_MUTE);bind(R.id.btnChUp,TvClient.KEY_CH_UP);
         bind(R.id.btnChDown,TvClient.KEY_CH_DOWN);bind(R.id.btnPower,TvClient.KEY_POWER);
+        bind(R.id.btn_last_ch, TvClient.KEY_LAST_CHANNEL);
     }
     private void bind(int id,int kc){View v=findViewById(id);if(v!=null)v.setOnClickListener(x->client.sendKey(kc));}
     @Override protected void onDestroy(){super.onDestroy();client.disconnect();if(discovery!=null)discovery.stop();}
