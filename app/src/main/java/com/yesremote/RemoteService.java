@@ -44,6 +44,7 @@ public class RemoteService extends Service {
         // ======================================================
         if (intent != null && ACTION.equals(intent.getAction())) {
             int kc = intent.getIntExtra(EXTRA, -1);
+            Log.d(TAG, "ACTION_SEND_KEY received kc=" + kc + " connected=" + (client != null && client.isConnected()));
             if (kc >= 0 && client != null && client.isConnected()) {
                 client.sendKey(kc);
             }

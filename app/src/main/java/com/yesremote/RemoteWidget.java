@@ -30,7 +30,7 @@ public class RemoteWidget extends AppWidgetProvider {
     }
     private static PendingIntent pi(Context ctx,int kc,int req){
         Intent i=new Intent(ctx,RemoteService.class);
-        i.setAction(RemoteService.ACTION); i.putExtra(RemoteService.EXTRA,kc);
+        i.setAction("com.yesremote.ACTION_SEND_KEY"); i.putExtra("keycode",kc);
         int f=PendingIntent.FLAG_UPDATE_CURRENT|(Build.VERSION.SDK_INT>=23?PendingIntent.FLAG_IMMUTABLE:0);
         return PendingIntent.getService(ctx,req,i,f);
     }
