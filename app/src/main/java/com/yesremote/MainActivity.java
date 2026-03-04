@@ -56,11 +56,7 @@ public class MainActivity extends AppCompatActivity {
             setStatus("מתחבר...",0xFF8892A4); // הפעל service עם IP חדש
                 Intent si = new Intent(MainActivity.this, RemoteService.class);
                 si.putExtra("ip", saved);
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    MainActivity.this.startForegroundService(si);
-                } else {
-                    MainActivity.this.startService(si);
-                }
+                MainActivity.this.startService(si);
                 if (remoteService != null) client = remoteService.getClient();
         }
         setupButtons();
