@@ -20,15 +20,18 @@ public class MainActivity extends AppCompatActivity {
     private boolean serviceBound = false;
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName name, IBinder binder) {
-            RemoteService.LocalBinder lb = (RemoteService.LocalBinder) binder;
-            remoteService = lb.getService();
+            remoteService = ((RemoteService.LocalBinder) binder).getService();
             serviceBound = true;
-            // עדכן client reference
+            // ← כאן client מתעדכן לclient המחובר של ה-Service
             client = remoteService.getClient();
+            // עדכן listener כדי שה-UI יתעדכן
+            client.setListener(new TvClient.Listener() {
+                public void onConnected()    { runOnUiThread(()->setStatus("מחובר ✅",0xFF4CAF50)); }
+                public void onDisconnected() { runOnUiThread(()->setStatus("מנותק",0xFFE94560)); }
+                public void onError(String m){ runOnUiThread(()->setStatus("שגיאה: "+m,0xFFFF9800)); }
+            });
         }
-        public void onServiceDisconnected(ComponentName name) {
-            serviceBound = false;
-        }
+        public void onServiceDisconnected(ComponentName name) { serviceBound = false; }
     };
 
     private TvDiscovery discovery;
@@ -41,25 +44,26 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle s) {
         super.onCreate(s);
         setContentView(R.layout.activity_main);
+
+        // client זמני עד שService יתחבר
         client = new TvClient(this);
         tvStatus = findViewById(R.id.tvStatus);
         etIp = findViewById(R.id.etIp);
         String saved = client.getSavedIp();
         if (!saved.isEmpty()) { etIp.setText(saved); currentIp = saved; }
-        client.setListener(new TvClient.Listener() {
-            public void onConnected()    { runOnUiThread(()->setStatus("מחובר ✅",0xFF4CAF50)); }
-            public void onDisconnected() { runOnUiThread(()->setStatus("מנותק",0xFFE94560)); }
-            public void onError(String m){ runOnUiThread(()->setStatus("שגיאה: "+m,0xFFFF9800)); }
-        });
-        startDiscovery();
-        if (!saved.isEmpty() && client.isPaired(saved)) {
-            setStatus("מתחבר...",0xFF8892A4); // הפעל service עם IP חדש
-                Intent si = new Intent(MainActivity.this, RemoteService.class);
-                si.putExtra("ip", saved);
-                MainActivity.this.startService(si);
-                if (remoteService != null) client = remoteService.getClient();
-        }
+
         setupButtons();
+        startDiscovery();
+
+        if (!saved.isEmpty() && client.isPaired(saved)) {
+            setStatus("מתחבר...", 0xFF8892A4);
+            // הפעל Service
+            Intent si = new Intent(this, RemoteService.class);
+            si.putExtra("ip", saved);
+            startService(si);
+            // ← bindService כדי לקבל reference לclient המחובר
+            bindService(new Intent(this, RemoteService.class), serviceConnection, BIND_AUTO_CREATE);
+        }
     }
 
     private void startDiscovery() {
@@ -68,9 +72,9 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     for (String[] d : foundDevices) if (d[1].equals(host)) return;
                     foundDevices.add(new String[]{name, host});
-                    if (etIp.getText().toString().isEmpty()) { etIp.setText(host); currentIp=host; }
+                    if (etIp.getText().toString().isEmpty()) { etIp.setText(host); currentIp = host; }
                     if (foundDevices.size() > 1) findViewById(R.id.btnChooseDevice).setVisibility(View.VISIBLE);
-                    setStatus("נמצא: "+name, 0xFF2196F3);
+                    setStatus("נמצא: " + name, 0xFF2196F3);
                 });
             }
             public void onDiscoveryFailed() {}
@@ -80,41 +84,60 @@ public class MainActivity extends AppCompatActivity {
 
     private void showDevicePicker() {
         String[] names = new String[foundDevices.size()];
-        for (int i=0;i<foundDevices.size();i++)
+        for (int i = 0; i < foundDevices.size(); i++)
             names[i] = foundDevices.get(i)[0] + "  (" + foundDevices.get(i)[1] + ")";
         new AlertDialog.Builder(this).setTitle("בחר מכשיר")
-            .setItems(names,(d,w)->{
-                String host=foundDevices.get(w)[1];
-                etIp.setText(host); currentIp=host;
-                setStatus("נבחר: "+foundDevices.get(w)[0],0xFF2196F3);
+            .setItems(names, (d, w) -> {
+                String host = foundDevices.get(w)[1];
+                etIp.setText(host); currentIp = host;
+                setStatus("נבחר: " + foundDevices.get(w)[0], 0xFF2196F3);
             }).show();
     }
 
     private void doConnect() {
         String ip = etIp.getText().toString().trim();
-        if (ip.isEmpty()) { Toast.makeText(this,"הכנס IP",Toast.LENGTH_SHORT).show(); return; }
-        currentIp=ip; client.saveIp(ip);
-        if (client.isPaired(ip)) { setStatus("מתחבר...",0xFF8892A4); client.connect(ip); return; }
-        setStatus("מתחיל pairing...",0xFFFF9800);
-        pairing = new TvPairing(ip, new TvPairing.Callback() {
-            public void onShowPin() { runOnUiThread(()->{ setStatus("הסתכל על הטלוויזיה לקוד",0xFFFF9800); showPinDialog(); }); }
-            public void onPaired(byte[] key, byte[] cert) {
-                client.savePairing(currentIp,key,cert);
-                runOnUiThread(()->{ setStatus("מחובר ✅",0xFF4CAF50); client.connect(currentIp); });
-            }
-            public void onError(String m) { runOnUiThread(()->setStatus("שגיאה: "+m,0xFFFF9800)); }
-        });
-        pairing.start();
+        if (ip.isEmpty()) { Toast.makeText(this, "הכנס IP", Toast.LENGTH_SHORT).show(); return; }
+        currentIp = ip;
+        client.saveIp(ip);
+
+        // הפעל Service עם IP
+        Intent si = new Intent(this, RemoteService.class);
+        si.putExtra("ip", ip);
+        startService(si);
+
+        // bind אם לא עשינו עוד
+        if (!serviceBound) {
+            bindService(new Intent(this, RemoteService.class), serviceConnection, BIND_AUTO_CREATE);
+        }
+
+        if (!client.isPaired(ip)) {
+            setStatus("מתחיל pairing...", 0xFFFF9800);
+            pairing = new TvPairing(ip, new TvPairing.Callback() {
+                public void onShowPin() { runOnUiThread(() -> { setStatus("הסתכל על הטלוויזיה לקוד", 0xFFFF9800); showPinDialog(); }); }
+                public void onPaired(byte[] key, byte[] cert) {
+                    client.savePairing(currentIp, key, cert);
+                    runOnUiThread(() -> setStatus("Paired! מתחבר...", 0xFF4CAF50));
+                    // שלח IP ל-service כדי שיתחבר
+                    Intent si2 = new Intent(MainActivity.this, RemoteService.class);
+                    si2.putExtra("ip", currentIp);
+                    startService(si2);
+                }
+                public void onError(String m) { runOnUiThread(() -> setStatus("שגיאה: " + m, 0xFFFF9800)); }
+            });
+            pairing.start();
+        } else {
+            setStatus("מתחבר...", 0xFF8892A4);
+        }
     }
 
     private void doReset() {
         new AlertDialog.Builder(this).setTitle("איפוס חיבור")
             .setMessage("למחוק את נתוני ה-pairing ולהתחיל מחדש?")
-            .setPositiveButton("כן",(d,w)->{
+            .setPositiveButton("כן", (d, w) -> {
                 if (!currentIp.isEmpty()) client.clearPairing(currentIp);
-                setStatus("נתוני חיבור נמחקו - לחץ חבר",0xFF8892A4);
+                setStatus("נתוני חיבור נמחקו - לחץ חבר", 0xFF8892A4);
             })
-            .setNegativeButton("ביטול",null).show();
+            .setNegativeButton("ביטול", null).show();
     }
 
     private void showPinDialog() {
@@ -124,31 +147,42 @@ public class MainActivity extends AppCompatActivity {
         pin.setTextColor(0xFF000000);
         new AlertDialog.Builder(this).setTitle("קוד אישור")
             .setMessage("הכנס את הקוד מהטלוויזיה:").setView(pin)
-            .setPositiveButton("אשר",(d,w)->{String p=pin.getText().toString().trim();if(!p.isEmpty()&&pairing!=null)pairing.sendPin(p);})
+            .setPositiveButton("אשר", (d, w) -> { String p = pin.getText().toString().trim(); if (!p.isEmpty() && pairing != null) pairing.sendPin(p); })
             .setCancelable(false).show();
     }
 
-    private void setStatus(String t,int c){tvStatus.setText(t);tvStatus.setTextColor(c);}
+    private void setStatus(String t, int c) { tvStatus.setText(t); tvStatus.setTextColor(c); }
 
-    private void setupButtons(){
-        findViewById(R.id.btnConnect).setOnClickListener(v->doConnect());
-        findViewById(R.id.btnReset).setOnClickListener(v->doReset());
-        findViewById(R.id.btnChooseDevice).setOnClickListener(v->showDevicePicker());
-        int[] ids={R.id.btn0,R.id.btn1,R.id.btn2,R.id.btn3,R.id.btn4,
-                   R.id.btn5,R.id.btn6,R.id.btn7,R.id.btn8,R.id.btn9};
-        for(int i=0;i<ids.length;i++){final int d=i;Button b=findViewById(ids[i]);
-            if(b!=null)b.setOnClickListener(v->client.sendKey(TvClient.digit(d)));}
-        bind(R.id.btnUp,TvClient.KEY_UP);bind(R.id.btnDown,TvClient.KEY_DOWN);
-        bind(R.id.btnLeft,TvClient.KEY_LEFT);bind(R.id.btnRight,TvClient.KEY_RIGHT);
-        bind(R.id.btnOk,TvClient.KEY_OK);bind(R.id.btnBack,TvClient.KEY_BACK);
-        bind(R.id.btnHome,TvClient.KEY_HOME);bind(R.id.btnMenu,TvClient.KEY_MENU);
-        bind(R.id.btnVolUp,TvClient.KEY_VOL_UP);bind(R.id.btnVolDown,TvClient.KEY_VOL_DOWN);
-        bind(R.id.btnMute,TvClient.KEY_MUTE);bind(R.id.btnChUp,TvClient.KEY_CH_UP);
-        bind(R.id.btnChDown,TvClient.KEY_CH_DOWN);bind(R.id.btnPower,TvClient.KEY_POWER);
+    private void setupButtons() {
+        findViewById(R.id.btnConnect).setOnClickListener(v -> doConnect());
+        findViewById(R.id.btnReset).setOnClickListener(v -> doReset());
+        findViewById(R.id.btnChooseDevice).setOnClickListener(v -> showDevicePicker());
+        int[] ids = {R.id.btn0,R.id.btn1,R.id.btn2,R.id.btn3,R.id.btn4,
+                     R.id.btn5,R.id.btn6,R.id.btn7,R.id.btn8,R.id.btn9};
+        for (int i = 0; i < ids.length; i++) {
+            final int d = i;
+            Button b = findViewById(ids[i]);
+            if (b != null) b.setOnClickListener(v -> client.sendKey(TvClient.digit(d)));
+        }
+        bind(R.id.btnUp,      TvClient.KEY_UP);      bind(R.id.btnDown,    TvClient.KEY_DOWN);
+        bind(R.id.btnLeft,    TvClient.KEY_LEFT);    bind(R.id.btnRight,   TvClient.KEY_RIGHT);
+        bind(R.id.btnOk,      TvClient.KEY_OK);      bind(R.id.btnBack,    TvClient.KEY_BACK);
+        bind(R.id.btnHome,    TvClient.KEY_HOME);    bind(R.id.btnMenu,    TvClient.KEY_MENU);
+        bind(R.id.btnVolUp,   TvClient.KEY_VOL_UP);  bind(R.id.btnVolDown, TvClient.KEY_VOL_DOWN);
+        bind(R.id.btnMute,    TvClient.KEY_MUTE);    bind(R.id.btnChUp,    TvClient.KEY_CH_UP);
+        bind(R.id.btnChDown,  TvClient.KEY_CH_DOWN); bind(R.id.btnPower,   TvClient.KEY_POWER);
         bind(R.id.btn_last_ch, TvClient.KEY_LAST_CHANNEL);
     }
-    private void bind(int id,int kc){View v=findViewById(id);if(v!=null)v.setOnClickListener(x->client.sendKey(kc));}
-    @Override protected void onDestroy(){super.onDestroy();client.disconnect();if(discovery!=null)discovery.stop();}
 
+    private void bind(int id, int kc) {
+        View v = findViewById(id);
+        if (v != null) v.setOnClickListener(x -> client.sendKey(kc));
+    }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (serviceBound) { unbindService(serviceConnection); serviceBound = false; }
+        if (discovery != null) discovery.stop();
+    }
 }
