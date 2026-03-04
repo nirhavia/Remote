@@ -5,23 +5,27 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.content.pm.ServiceInfo;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 
 public class RemoteService extends Service {
-    public static final String ACTION = "com.yesremote.ACTION_SEND_KEY";
-    public static final String EXTRA  = "keycode";
-
     private static final String TAG = "RemoteService";
     private static final String CHANNEL_ID = "yes_remote_channel";
     private static final int NOTIF_ID = 1;
+    private static final String PREFS = "tvprefs";
+
+    public static final String ACTION = "com.yesremote.ACTION_SEND_KEY";
+    public static final String EXTRA  = "keycode";
 
     private TvClient client;
     private String currentIp = "";
+    private final Handler handler = new Handler(Looper.getMainLooper());
     private final IBinder binder = new LocalBinder();
 
     public class LocalBinder extends Binder {
@@ -36,24 +40,36 @@ public class RemoteService extends Service {
         Log.d(TAG, "Service created");
     }
 
-        @Override
+    @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // ======================================================
-        // ACTION_SEND_KEY מגיע מווידג'ט - אל תקרא startForeground!
-        // רק בצע את הפקודה ותחזור.
-        // ======================================================
+
+        // פקודה מווידג'ט - אל תגע ב-startForeground
         if (intent != null && ACTION.equals(intent.getAction())) {
             int kc = intent.getIntExtra(EXTRA, -1);
-            Log.d(TAG, "ACTION_SEND_KEY received kc=" + kc + " connected=" + (client != null && client.isConnected()));
-            if (kc >= 0 && client != null && client.isConnected()) {
-                client.sendKey(kc);
+            Log.d(TAG, "Widget key kc=" + kc + " connected=" + client.isConnected());
+            if (kc >= 0) {
+                if (client.isConnected()) {
+                    client.sendKey(kc);
+                } else {
+                    // התחבר מחדש ושלח את הפקודה אחרי 2 שניות
+                    String ip = getSavedIp();
+                    if (!ip.isEmpty()) {
+                        Log.d(TAG, "Reconnecting to " + ip + " then sending kc=" + kc);
+                        connectToTv(ip);
+                        final int finalKc = kc;
+                        handler.postDelayed(() -> {
+                            if (client.isConnected()) client.sendKey(finalKc);
+                            else Log.w(TAG, "Still not connected after reconnect");
+                        }, 2500);
+                    }
+                }
             }
             return START_STICKY;
         }
 
-        // הפעלה ראשונה מ-MainActivity - כאן מותר startForeground
+        // הפעלה מ-MainActivity - startForeground מותר כאן
         try {
-            if (android.os.Build.VERSION.SDK_INT >= 34) {
+            if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(NOTIF_ID, buildNotification("מחפש TV..."),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
             } else {
@@ -65,9 +81,17 @@ public class RemoteService extends Service {
 
         if (intent != null) {
             String ip = intent.getStringExtra("ip");
-            if (ip != null && !ip.equals(currentIp)) {
+            if (ip != null && !ip.isEmpty() && !ip.equals(currentIp)) {
                 currentIp = ip;
+                saveIp(ip);
                 connectToTv(ip);
+            } else if (currentIp.isEmpty()) {
+                // נסה IP שמור
+                String saved = getSavedIp();
+                if (!saved.isEmpty()) {
+                    currentIp = saved;
+                    connectToTv(saved);
+                }
             }
         }
         return START_STICKY;
@@ -81,22 +105,28 @@ public class RemoteService extends Service {
                 updateNotification("מחובר ל-" + ip);
             }
             public void onDisconnected() {
-                Log.d(TAG, "Disconnected, reconnecting in 3s...");
+                Log.d(TAG, "Disconnected, retry in 3s");
                 updateNotification("מתחבר מחדש...");
-                // התחברות אוטומטית מחדש
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                handler.postDelayed(() -> {
                     if (!currentIp.isEmpty()) connectToTv(currentIp);
                 }, 3000);
             }
             public void onError(String m) {
                 Log.e(TAG, "Error: " + m);
-                updateNotification("שגיאה - מנסה שוב...");
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                handler.postDelayed(() -> {
                     if (!currentIp.isEmpty()) connectToTv(currentIp);
                 }, 5000);
             }
         });
         client.connect(ip);
+    }
+
+    private String getSavedIp() {
+        return getSharedPreferences(PREFS, 0).getString("ip", "");
+    }
+
+    private void saveIp(String ip) {
+        getSharedPreferences(PREFS, 0).edit().putString("ip", ip).apply();
     }
 
     public TvClient getClient() { return client; }
@@ -126,7 +156,7 @@ public class RemoteService extends Service {
 
     private void updateNotification(String text) {
         NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.notify(NOTIF_ID, buildNotification(text));
+        if (nm != null) nm.notify(NOTIF_ID, buildNotification(text));
     }
 
     @Override
@@ -135,6 +165,7 @@ public class RemoteService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        handler.removeCallbacksAndMessages(null);
         if (client != null) client.disconnect();
     }
 }
