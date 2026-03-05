@@ -79,11 +79,15 @@ public class RemoteService extends Service {
 
         if (intent != null) {
             String ip = intent.getStringExtra("ip");
-            if (ip != null && !ip.isEmpty() && !ip.equals(currentIp)) {
+            if (ip != null && !ip.isEmpty()) {
+                // תמיד התחבר מחדש כשמגיע IP מה-Activity (גם אם אותו IP)
                 currentIp = ip;
                 saveIp(ip);
                 connectToTv(ip);
-            } else if (currentIp.isEmpty()) {
+            } else if (!currentIp.isEmpty()) {
+                // הפעלה ללא IP – חבר למה שנשמר
+                connectToTv(currentIp);
+            } else {
                 String saved = getSavedIp();
                 if (!saved.isEmpty()) { currentIp = saved; connectToTv(saved); }
             }
