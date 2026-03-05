@@ -24,8 +24,8 @@ public class MainActivity extends AppCompatActivity {
             serviceBound = true;
             // ← כאן client מתעדכן לclient המחובר של ה-Service
             client = remoteService.getClient();
-            // עדכן listener כדי שה-UI יתעדכן
-            client.setListener(new TvClient.Listener() {
+            // עדכן UI listener (לא מחליף את ה-reconnect listener של RemoteService)
+            remoteService.setUiListener(new TvClient.Listener() {
                 public void onConnected()    { runOnUiThread(()->setStatus("מחובר ✅",0xFF4CAF50)); }
                 public void onDisconnected() { runOnUiThread(()->setStatus("מנותק",0xFFE94560)); }
                 public void onError(String m){ runOnUiThread(()->setStatus("שגיאה: "+m,0xFFFF9800)); }
