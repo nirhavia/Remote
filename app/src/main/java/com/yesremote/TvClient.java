@@ -33,7 +33,7 @@ public class TvClient {
     private static final int    PORT  = 6466;
     private static final String PREFS = "tvprefs";
     // שולח RemoteSetActive כל KEEPALIVE_MS מילישניות
-    private static final long   KEEPALIVE_MS = 20_000;
+    private static final long   KEEPALIVE_MS = 5_000;
 
     // RemoteSetActive { active=1 } = field3(LEN) + len2 + field1(VARINT) + 1
     private static final byte[] SET_ACTIVE = {0x1A, 0x02, 0x08, 0x01};
@@ -119,6 +119,9 @@ public class TvClient {
                 try { for(int i=0;i<5;i++) readMsg(); } catch(Exception ignored){}
                 socket.setSoTimeout(0);
 
+                // שלח RemoteConfigureRequest + SET_ACTIVE מיד אחרי handshake
+                sendRaw(new byte[]{0x2A, 0x02, 0x08, 0x01}); // RemoteConfigureRequest
+                sendRaw(SET_ACTIVE);                          // RemoteSetActive
                 connected = true;
                 fire(0, null);
                 // התחל keepalive
