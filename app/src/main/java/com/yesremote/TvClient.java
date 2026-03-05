@@ -152,7 +152,11 @@ public class TvClient {
             } finally {
                 connected = false;
                 mainHandler.removeCallbacks(keepaliveRunnable);
-                fire(1, null);
+                // סגור socket רק אם לא כבר נסגר ע"י disconnect()
+                SSLSocket s = socket; socket = null;
+                try { if (s != null) s.close(); } catch (Exception ignored) {}
+                synchronized (outLock) { out = null; }
+                if (running) fire(1, null);  // reconnect רק אם לא הופסק בכוונה
             }
         }, "TvClient-conn").start();
     }
@@ -219,7 +223,8 @@ public class TvClient {
     public void disconnect() {
         running = false; connected = false;
         mainHandler.removeCallbacks(keepaliveRunnable);
-        try { if (socket!=null) socket.close(); } catch (Exception ignored) {}
+        SSLSocket s = socket; socket = null;  // null תחילה למניעת double-close
+        try { if (s != null) s.close(); } catch (Exception ignored) {}
         synchronized (outLock) { out = null; }
     }
 
