@@ -25,6 +25,7 @@ public class RemoteService extends Service {
     public static final String EXTRA  = "keycode";
 
     private TvClient client;
+    private TvClient.Listener uiListener;
     private String   currentIp = "";
     private final Handler  handler = new Handler(Looper.getMainLooper());
     private final IBinder  binder  = new LocalBinder();
@@ -90,16 +91,23 @@ public class RemoteService extends Service {
         return START_STICKY;
     }
 
+    public void setUiListener(TvClient.Listener l) { this.uiListener = l; }
+
     private void connectToTv(String ip) {
         client.disconnect();
         client.setListener(new TvClient.Listener() {
-            public void onConnected()    { updateNotification("מחובר ל-" + ip); }
+            public void onConnected() {
+                updateNotification("מחובר ל-" + ip);
+                if (uiListener != null) uiListener.onConnected();
+            }
             public void onDisconnected() {
                 updateNotification("מתחבר מחדש...");
                 handler.postDelayed(() -> { if (!currentIp.isEmpty()) connectToTv(currentIp); }, 3000);
+                if (uiListener != null) uiListener.onDisconnected();
             }
             public void onError(String m) {
                 handler.postDelayed(() -> { if (!currentIp.isEmpty()) connectToTv(currentIp); }, 5000);
+                if (uiListener != null) uiListener.onError(m);
             }
         });
         client.connect(ip);
